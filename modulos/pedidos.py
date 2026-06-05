@@ -83,6 +83,74 @@ def _usar_saldo_mayorista(db, pedido):
     }).eq("id", cliente_id).execute()
 
 
+def _ordenar_familias(familias):
+    orden_preferido = [
+        "Sorrentinos",
+        "Sorrentinos Premium",
+        "Tartas",
+        "Tartas Individuales",
+        "Tartas Individuales Premium",
+        "Tartas Integrales",
+        "Ñoquis",
+        "Ñoquis comunes",
+        "Ñoquis rellenos",
+        "Pizzas",
+        "Sfijas",
+        "Bombitas de papa",
+        "Sandwiches de miga",
+        "Torta salada",
+        "Otros",
+    ]
+
+    familias_ordenadas = []
+    usadas = set()
+
+    for f in orden_preferido:
+        for existente in familias.keys():
+            if existente.lower() == f.lower() and existente not in usadas:
+                familias_ordenadas.append(existente)
+                usadas.add(existente)
+
+    for f in sorted(familias.keys()):
+        if f not in usadas:
+            familias_ordenadas.append(f)
+
+    return familias_ordenadas
+
+
+def _resumen_items(productos, familias_ordenadas, familias, cliente):
+    items = []
+    resumen = []
+
+    for familia in familias_ordenadas:
+        subtotal_familia = 0.0
+        unidades_familia = 0.0
+
+        for p in familias[familia]:
+            precio = _precio_para_cliente(p, cliente)
+            cant = _float(st.session_state.get(f"cant_{p['id']}", 0))
+            subtotal = cant * precio
+
+            if cant > 0:
+                unidades_familia += cant
+                subtotal_familia += subtotal
+                items.append({
+                    "producto_id": p["id"],
+                    "producto_nombre": p["nombre"],
+                    "cantidad": cant,
+                    "precio_unitario": precio,
+                    "subtotal": subtotal,
+                })
+
+        resumen.append({
+            "familia": familia,
+            "subtotal": subtotal_familia,
+            "unidades": unidades_familia,
+        })
+
+    return items, resumen
+
+
 def render():
     header("📝 Pedidos", "Crear pedido por familias, cobrar o descontar saldo mayorista")
     db = require_db()
@@ -126,56 +194,38 @@ def render():
             familia = _familia_producto(p)
             familias.setdefault(familia, []).append(p)
 
-        orden_preferido = [
-            "Sorrentinos",
-            "Sorrentinos Premium",
-            "Tartas",
-            "Tartas Individuales",
-            "Tartas Individuales Premium",
-            "Tartas Integrales",
-            "Ñoquis",
-            "Ñoquis comunes",
-            "Ñoquis rellenos",
-            "Pizzas",
-            "Sfijas",
-            "Bombitas de papa",
-            "Sandwiches de miga",
-            "Torta salada",
-            "Otros",
-        ]
+        familias_ordenadas = _ordenar_familias(familias)
 
-        familias_ordenadas = []
-        usadas = set()
-
-        for f in orden_preferido:
-            for existente in familias.keys():
-                if existente.lower() == f.lower() and existente not in usadas:
-                    familias_ordenadas.append(existente)
-                    usadas.add(existente)
-
-        for f in sorted(familias.keys()):
-            if f not in usadas:
-                familias_ordenadas.append(f)
+        items_pre, resumen_pre = _resumen_items(productos, familias_ordenadas, familias, cliente)
 
         st.markdown("### Productos por familia")
 
-        items = []
-        subtotales_familia = {}
+        labels_tabs = []
+        for r in resumen_pre:
+            if r["unidades"] > 0:
+                labels_tabs.append(f"{r['familia']} ({int(r['unidades']) if r['unidades'].is_integer() else r['unidades']})")
+            else:
+                labels_tabs.append(r["familia"])
 
-        for familia in familias_ordenadas:
-            productos_familia = familias[familia]
-            subtotal_familia = 0.0
+        tabs = st.tabs(labels_tabs)
 
-            for p in productos_familia:
-                precio_tmp = _precio_para_cliente(p, cliente)
-                cant_tmp = _float(st.session_state.get(f"cant_{p['id']}", 0))
-                subtotal_familia += cant_tmp * precio_tmp
+        for idx, familia in enumerate(familias_ordenadas):
+            with tabs[idx]:
+                subtotal_familia = next((r["subtotal"] for r in resumen_pre if r["familia"] == familia), 0)
+                unidades_familia = next((r["unidades"] for r in resumen_pre if r["familia"] == familia), 0)
 
-            subtotales_familia[familia] = subtotal_familia
-            titulo = f"{familia} — {money(subtotal_familia)}"
+                c_head1, c_head2 = st.columns([2, 1])
+                with c_head1:
+                    st.markdown(f"#### {familia}")
+                with c_head2:
+                    st.markdown(f"#### {money(subtotal_familia)}")
 
-            with st.expander(titulo, expanded=False):
-                for p in productos_familia:
+                if unidades_familia > 0:
+                    st.success(f"Cantidad cargada en esta familia: {unidades_familia:g}")
+                else:
+                    st.info("Sin productos cargados en esta familia.")
+
+                for p in familias[familia]:
                     c1, c2, c3 = st.columns([4, 1, 1])
 
                     unidad = p.get("unidad") or "unidad"
@@ -192,19 +242,10 @@ def render():
                     )
 
                     subtotal = cant * precio
-
-                    if cant > 0:
-                        items.append({
-                            "producto_id": p["id"],
-                            "producto_nombre": p["nombre"],
-                            "cantidad": cant,
-                            "precio_unitario": precio,
-                            "subtotal": subtotal,
-                        })
-
                     c3.write("Subtotal")
                     c3.markdown(f"**{money(subtotal)}**")
 
+        items, resumen_familias = _resumen_items(productos, familias_ordenadas, familias, cliente)
         total = sum(i["subtotal"] for i in items)
 
         st.divider()
@@ -212,14 +253,18 @@ def render():
         ctot1, ctot2 = st.columns([2, 1])
         with ctot1:
             st.markdown("### Resumen por familia")
-            resumen = [
-                {"Familia": f, "Subtotal": money(v)}
-                for f, v in subtotales_familia.items()
-                if v > 0
+            resumen_df = [
+                {
+                    "Familia": r["familia"],
+                    "Cantidad": r["unidades"],
+                    "Subtotal": money(r["subtotal"]),
+                }
+                for r in resumen_familias
+                if r["subtotal"] > 0
             ]
 
-            if resumen:
-                st.dataframe(pd.DataFrame(resumen), use_container_width=True, hide_index=True)
+            if resumen_df:
+                st.dataframe(pd.DataFrame(resumen_df), use_container_width=True, hide_index=True)
             else:
                 st.info("Todavía no cargaste productos.")
 
