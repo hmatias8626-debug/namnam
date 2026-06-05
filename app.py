@@ -34,20 +34,49 @@ def _login_background():
         display: none !important;
     }}
 
+    /*
+    Fondo con 2 capas:
+    1) La misma imagen en cover, oscura y borrosa para llenar toda la pantalla.
+    2) La imagen completa en contain a la izquierda, para que se vea como el flyer original.
+    */
     .stApp {{
         background-image:
-            linear-gradient(rgba(0,0,0,.20), rgba(0,0,0,.32)),
+            linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.45)),
+            url("data:image/jpeg;base64,{img_b64}"),
             url("data:image/jpeg;base64,{img_b64}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
+        background-size:
+            cover,
+            cover,
+            contain;
+        background-position:
+            center,
+            center,
+            left center;
+        background-repeat:
+            no-repeat,
+            no-repeat,
+            no-repeat;
         background-attachment: fixed;
     }}
 
+    .stApp::before {{
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.20);
+        backdrop-filter: blur(3px);
+        z-index: 0;
+        pointer-events: none;
+    }}
+
     .main .block-container {{
-        max-width: 520px !important;
-        padding-top: 50vh !important;
+        position: relative;
+        z-index: 1;
+        max-width: 500px !important;
+        padding-top: 27vh !important;
         padding-bottom: 5vh !important;
+        margin-left: auto !important;
+        margin-right: 9vw !important;
     }}
 
     /* Saca el bloque negro gigante de Streamlit */
@@ -61,7 +90,7 @@ def _login_background():
     /* Tarjeta real del login */
     div[data-testid="stVerticalBlock"] > div:has(input) form,
     div[data-testid="stForm"] {{
-        background: rgba(12, 12, 12, .42) !important;
+        background: rgba(12, 12, 12, .48) !important;
         border: 1px solid rgba(216,155,29,.78) !important;
         border-radius: 26px !important;
         padding: 24px 28px !important;
@@ -70,17 +99,17 @@ def _login_background():
     }}
 
     h1 {{
-        font-size: 58px !important;
+        font-size: 62px !important;
         text-align: center !important;
         color: #FFF7E6 !important;
-        text-shadow: 0 4px 18px rgba(0,0,0,.75) !important;
+        text-shadow: 0 4px 18px rgba(0,0,0,.85) !important;
         margin-bottom: 0 !important;
     }}
 
     h2, h3, p, label, span {{
         color: #FFF7E6 !important;
         opacity: 1 !important;
-        text-shadow: 0 2px 8px rgba(0,0,0,.65) !important;
+        text-shadow: 0 2px 8px rgba(0,0,0,.85) !important;
     }}
 
     label {{
@@ -113,9 +142,32 @@ def _login_background():
     #MainMenu, footer, header {{
         visibility: hidden;
     }}
+
+    @media (max-width: 900px) {{
+        .stApp {{
+            background-size:
+                cover,
+                cover,
+                cover;
+            background-position:
+                center,
+                center,
+                center;
+        }}
+
+        .main .block-container {{
+            max-width: 92vw !important;
+            padding-top: 36vh !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }}
+
+        h1 {{
+            font-size: 48px !important;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True)
-
 
 # Antes del login no se muestra menú lateral ni páginas.
 if not is_logged_in():
