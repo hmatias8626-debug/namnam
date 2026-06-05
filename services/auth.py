@@ -30,8 +30,8 @@ def current_user() -> dict | None:
 
 
 def login_box():
-    st.markdown("<div style='height:30px'></div>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 1.2, 1])
+    st.markdown("<div style='height:160px'></div>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1.6, 0.7, 1.6])
     with c2:
         st.markdown("<h1 style='text-align:center;color:#D89B1D;'>ÑAM ÑAM</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align:center;color:#FFF7E6;'>Sistema de gestión</p>", unsafe_allow_html=True)
