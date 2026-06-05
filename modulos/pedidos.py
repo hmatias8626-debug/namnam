@@ -40,12 +40,14 @@ def _registrar_consumo_mayorista(db, pedido):
     total = _float(pedido.get("total"))
     if not cliente_id or total <= 0:
         return
-    db.table(table("credito_movimientos")).insert({
+
+    db.table("namnam_credito_movimientos").insert({
         "cliente_id": cliente_id,
         "tipo": "Consumo",
         "importe": total,
         "observaciones": f"Pedido #{pedido['id']}",
     }).execute()
+
     cliente = db.table(table("clientes")).select("*").eq("id", cliente_id).execute().data[0]
     saldo_actual = _float(cliente.get("saldo_cuenta_corriente"))
     db.table(table("clientes")).update({

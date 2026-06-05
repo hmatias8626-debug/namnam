@@ -79,7 +79,7 @@ def render():
                             "forma_pago": forma_pago,
                             "medio": forma_pago,
                         }).execute()
-                        db.table(table("credito_movimientos")).insert({
+                        db.table("namnam_credito_movimientos").insert({
                             "cliente_id": cliente["id"],
                             "tipo": "Pago",
                             "importe": importe,
