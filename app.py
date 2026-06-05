@@ -1,3 +1,6 @@
+import base64
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -16,7 +19,83 @@ from modulos.perfil import render as render_perfil
 
 apply_theme()
 
+
+def _login_background():
+    img_path = Path("assets/login_fondo.jpeg")
+
+    if not img_path.exists():
+        return
+
+    img_b64 = base64.b64encode(img_path.read_bytes()).decode("utf-8")
+
+    st.markdown(f"""
+    <style>
+    [data-testid="stSidebar"] {{
+        display: none !important;
+    }}
+
+    .stApp {{
+        background-image:
+            linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.72)),
+            url("data:image/jpeg;base64,{img_b64}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+
+    .main .block-container {{
+        max-width: 620px !important;
+        padding-top: 8vh !important;
+        padding-bottom: 5vh !important;
+    }}
+
+    div[data-testid="stVerticalBlock"] > div:has(input) {{
+        background: rgba(8, 8, 8, .68);
+        border: 1px solid rgba(216,155,29,.75);
+        border-radius: 24px;
+        padding: 22px 28px;
+        box-shadow: 0 18px 45px rgba(0,0,0,.55);
+        backdrop-filter: blur(8px);
+    }}
+
+    h1, h2, h3, p, label, span {{
+        color: #FFF7E6 !important;
+        opacity: 1 !important;
+    }}
+
+    input {{
+        background-color: rgba(255,247,230,.96) !important;
+        color: #111111 !important;
+        font-weight: 800 !important;
+    }}
+
+    .stButton>button {{
+        width: 100%;
+        min-height: 46px;
+        font-size: 18px;
+        background-color: #D89B1D !important;
+        color: #111111 !important;
+        border-radius: 14px !important;
+        font-weight: 900 !important;
+        border: 0 !important;
+    }}
+
+    .stButton>button:hover {{
+        background-color: #ffc247 !important;
+        color: #111111 !important;
+    }}
+
+    #MainMenu, footer, header {{
+        visibility: hidden;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# Antes del login no se muestra menú lateral ni páginas.
 if not is_logged_in():
+    _login_background()
     login_box()
     st.stop()
 
