@@ -63,8 +63,8 @@ def _login_background():
         content: "";
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,.20);
-        backdrop-filter: blur(3px);
+        background: rgba(0,0,0,.05);
+        backdrop-filter: blur(0px);
         z-index: 0;
         pointer-events: none;
     }}
