@@ -41,7 +41,7 @@ def _login_background():
     */
     .stApp {{
         background-image:
-            linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.45)),
+            linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.10)),
             url("data:image/jpeg;base64,{img_b64}"),
             url("data:image/jpeg;base64,{img_b64}");
         background-size:
