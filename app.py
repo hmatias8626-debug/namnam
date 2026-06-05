@@ -11,6 +11,7 @@ from modulos.pedidos import render as render_pedidos
 from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
+from modulos.perfil import render as render_perfil
 
 apply_theme()
 
@@ -23,7 +24,7 @@ user = current_user() or {}
 
 with st.sidebar:
     st.markdown("### Ñam Ñam")
-    opciones = ["Inicio", "Productos", "Clientes", "Pedidos", "Stock", "Caja"]
+    opciones = ["Inicio", "Productos", "Clientes", "Pedidos", "Stock", "Caja", "Mi perfil"]
     if user.get("rol") == "admin":
         opciones.append("Colaboradores")
     seccion = st.radio("Menú", opciones, label_visibility="collapsed")
@@ -40,6 +41,8 @@ elif seccion == "Stock":
     render_stock()
 elif seccion == "Caja":
     render_caja()
+elif seccion == "Mi perfil":
+    render_perfil()
 elif seccion == "Colaboradores":
     render_colaboradores()
 else:
