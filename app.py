@@ -69,7 +69,17 @@ def _login_background():
         pointer-events: none;
     }}
 
-    .main .block-container {{
+    div[data-testid="stAppViewContainer"] section.main > div {
+    position: relative;
+    z-index: 1;
+    max-width: 450px !important;
+    padding-top: 35vh !important;
+    padding-bottom: 50vh !important;
+    margin-left: auto !important;
+    margin-right: 9vw !important;
+}
+
+/*.main .block-container {{
         position: relative;
         z-index: 1;
         max-width: 450px !important;
@@ -77,7 +87,7 @@ def _login_background():
         padding-bottom: 50vh !important;
         margin-left: auto !important;
         margin-right: 9vw !important;
-    }}
+    }}/*
 
     /* Saca el bloque negro gigante de Streamlit */
     div[data-testid="stVerticalBlock"] > div:has(input) {{
