@@ -13,6 +13,7 @@ from modulos.clientes import render as render_clientes
 from modulos.mayoristas import render as render_mayoristas
 from modulos.pedidos import render as render_pedidos
 from modulos.produccion import render as render_produccion
+from modulos.promociones import render as render_promociones
 from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
@@ -70,17 +71,6 @@ def _login_background():
         pointer-events: none;
     }}
 
-<<<<<<< HEAD
-    .main .block-container {{
-        position: relative;
-        z-index: 1;
-        max-width: 500px !important;
-        padding-top: 27vh !important;
-        padding-bottom: 5vh !important;
-        margin-left: auto !important;
-        margin-right: 9vw !important;
-    }}
-=======
 .main .block-container {{
     position: relative;
     z-index: 1;
@@ -94,7 +84,7 @@ def _login_background():
 div[data-testid="stAppViewContainer"] .main .block-container {{
     transform: translateY(180px) !important;
 }}
->>>>>>> 90eeec6ba9a3b7a3b214f6235a0de43b520ee3d1
+
 
     /* Saca el bloque negro gigante de Streamlit */
     div[data-testid="stVerticalBlock"] > div:has(input) {{
@@ -142,13 +132,9 @@ div[data-testid="stAppViewContainer"] .main .block-container {{
 
     .stButton>button {{
         width: 100%;
-<<<<<<< HEAD
-        min-height: 48px;
-        font-size: 18px;
-=======
         min-height: 38px;
         font-size: 14px;
->>>>>>> 90eeec6ba9a3b7a3b214f6235a0de43b520ee3d1
+
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
@@ -205,6 +191,7 @@ MENU = {
     "👥 Clientes": "Clientes",
     "🏪 Mayoristas": "Mayoristas",
     "📝 Pedidos": "Pedidos",
+    "🏷️ Promociones": "Promociones",
     "👨‍🍳 Producción": "Producción",
     "📊 Stock": "Stock",
     "💰 Caja": "Caja",
@@ -236,6 +223,9 @@ elif seccion == "Mayoristas":
 
 elif seccion == "Pedidos":
     render_pedidos()
+
+elif seccion == "Promociones":
+    render_promociones()
 
 elif seccion == "Producción":
     render_produccion()
