@@ -73,10 +73,10 @@ def _login_background():
         position: relative;
         z-index: 1;
         max-width: 450px !important;
-        padding-top: 100vh !important;
-        padding-bottom: 50vh !important;
+        padding-top: 48vh !important;
+        padding-bottom: 5vh !important;
         margin-left: auto !important;
-        margin-right: 9vw !important;
+        margin-right: 7vw !important;
     }}
 
     /* Saca el bloque negro gigante de Streamlit */
@@ -158,8 +158,8 @@ def _login_background():
         .main .block-container {{
             max-width: 92vw !important;
             padding-top: 70vh !important;
-            margin-left: 70% !important;
-            margin-right: 70% !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }}
 
         h1 {{
