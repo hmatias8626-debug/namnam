@@ -11,7 +11,7 @@ def apply_theme():
     <style>
     .stApp {{
         background: linear-gradient(135deg, #090909 0%, #171717 55%, #221805 100%);
-        color: {COLOR_CREMA};
+        color: {COLOR_CREMA} !important;
     }}
 
     [data-testid="stSidebar"] {{
@@ -21,93 +21,124 @@ def apply_theme():
 
     [data-testid="stSidebar"] * {{
         color: #ffffff !important;
-        font-size: 17px !important;
+        opacity: 1 !important;
     }}
 
-    [data-testid="stSidebar"] a {{
-        color: #ffffff !important;
-        font-weight: 700 !important;
-        padding: 10px 14px !important;
-        border-radius: 12px !important;
-        text-decoration: none !important;
-    }}
-
-    [data-testid="stSidebar"] a:hover {{
-        background-color: rgba(216,155,29,.28) !important;
-        color: #ffffff !important;
-    }}
-
-    [data-testid="stSidebar"] div[data-testid="stSidebarNav"] span {{
-        color: #ffffff !important;
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span {{
+        font-size: 18px !important;
         font-weight: 700 !important;
     }}
 
-    [data-testid="stSidebar"] button {{
-        color: #111111 !important;
+    [data-testid="stSidebar"] [role="radiogroup"] label {{
+        background: rgba(255,255,255,.045) !important;
+        border: 1px solid rgba(216,155,29,.35) !important;
+        border-radius: 13px !important;
+        padding: 9px 12px !important;
+        margin-bottom: 6px !important;
+    }}
+
+    [data-testid="stSidebar"] [role="radiogroup"] label:hover {{
+        background: rgba(216,155,29,.22) !important;
+        border: 1px solid {COLOR_DORADO} !important;
+    }}
+
+    h1, h2, h3, h4, h5, h6 {{
+        color: #FFF7E6 !important;
+        opacity: 1 !important;
+    }}
+
+    p, span, label, div {{
+        color: #FFF7E6;
+    }}
+
+    label,
+    .stTextInput label,
+    .stTextArea label,
+    .stSelectbox label,
+    .stNumberInput label,
+    .stRadio label,
+    .stCheckbox label {{
+        color: #FFF7E6 !important;
         font-weight: 800 !important;
+        opacity: 1 !important;
     }}
 
-    [data-testid="stSidebar"] small,
-    [data-testid="stSidebar"] .stCaptionContainer,
-    [data-testid="stSidebar"] .stCaptionContainer * {{
-        color: #f4e3b3 !important;
-        font-size: 14px !important;
-    }}
-
-    h1, h2, h3 {{
-        color: {COLOR_CREMA};
+    div[data-testid="stForm"] label,
+    div[data-testid="stMarkdownContainer"] p {{
+        color: #FFF7E6 !important;
+        opacity: 1 !important;
     }}
 
     .nam-card {{
-        background: rgba(255,255,255,.055);
-        border: 1px solid rgba(216,155,29,.55);
+        background: rgba(255,255,255,.07);
+        border: 1px solid rgba(216,155,29,.65);
         border-radius: 18px;
         padding: 18px;
         box-shadow: 0 8px 25px rgba(0,0,0,.35);
     }}
 
     .nam-title {{
-        color: {COLOR_DORADO};
+        color: {COLOR_DORADO} !important;
         font-weight: 900;
         letter-spacing: .5px;
+        text-shadow: 0 2px 10px rgba(216,155,29,.2);
     }}
 
     .metric-card {{
-        background: rgba(216,155,29,.13);
+        background: rgba(216,155,29,.16);
         border: 1px solid {COLOR_DORADO};
         border-radius: 18px;
         padding: 16px;
     }}
 
     .metric-card small {{
-        color: #dddddd;
+        color: #ffffff !important;
+        opacity: .92 !important;
+        font-weight: 700;
     }}
 
     .metric-card b {{
-        color: {COLOR_CREMA};
+        color: {COLOR_CREMA} !important;
         font-size: 28px;
     }}
 
     div[data-testid="stMetricValue"] {{
-        color: {COLOR_CREMA};
+        color: {COLOR_CREMA} !important;
+    }}
+
+    div[data-testid="stMetricLabel"] {{
+        color: #ffffff !important;
+        opacity: 1 !important;
+        font-weight: 800 !important;
     }}
 
     .stButton>button {{
         background-color: {COLOR_DORADO};
-        color: #111111;
+        color: #111 !important;
         border-radius: 12px;
         border: 0;
-        font-weight: 800;
+        font-weight: 900;
     }}
 
     .stButton>button:hover {{
         background-color: #ffc247;
-        color: #111111;
+        color: #111 !important;
         border: 0;
     }}
 
     .stDataFrame, .stTable {{
         background: rgba(255,255,255,.04);
+    }}
+
+    input, textarea, select {{
+        color: #111111 !important;
+        font-weight: 700 !important;
+    }}
+
+    .stAlert div {{
+        color: inherit !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -122,5 +153,5 @@ def header(title: str, subtitle: str = ""):
 def card_metric(label: str, value: str):
     st.markdown(
         f"<div class='metric-card'><small>{label}</small><br><b>{value}</b></div>",
-        unsafe_allow_html=True,
+        unsafe_allow_html=True
     )

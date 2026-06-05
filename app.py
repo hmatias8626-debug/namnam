@@ -16,32 +16,34 @@ from modulos.perfil import render as render_perfil
 
 apply_theme()
 
-# Antes del login no se muestra menú lateral ni páginas.
 if not is_logged_in():
     login_box()
     st.stop()
 
 user = current_user() or {}
 
+MENU = {
+    "🏠 Inicio": "Inicio",
+    "📦 Productos": "Productos",
+    "👥 Clientes": "Clientes",
+    "🏪 Mayoristas": "Mayoristas",
+    "📝 Pedidos": "Pedidos",
+    "📊 Stock": "Stock",
+    "💰 Caja": "Caja",
+    "🙋 Mi perfil": "Mi perfil",
+}
+
+if user.get("rol") == "admin":
+    MENU["👨‍💼 Colaboradores"] = "Colaboradores"
+
 with st.sidebar:
-    st.markdown("### Ñam Ñam")
-
-    opciones = [
-        "Inicio",
-        "Productos",
-        "Clientes",
-        "Mayoristas",
-        "Pedidos",
-        "Stock",
-        "Caja",
-        "Mi perfil",
-    ]
-
-    if user.get("rol") == "admin":
-        opciones.append("Colaboradores")
-
-    seccion = st.radio("Menú", opciones, label_visibility="collapsed")
-
+    st.markdown("### 🍝 Ñam Ñam")
+    opcion_label = st.radio(
+        "Menú",
+        list(MENU.keys()),
+        label_visibility="collapsed"
+    )
+    seccion = MENU[opcion_label]
     st.divider()
     logout_button()
 

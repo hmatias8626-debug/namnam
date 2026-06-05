@@ -35,6 +35,27 @@ def _familia_producto(p):
     return familia if familia else "Otros"
 
 
+def _emoji_familia(familia):
+    f = familia.lower()
+    if "sorrent" in f:
+        return "🍝"
+    if "tarta" in f:
+        return "🥧"
+    if "ñoqui" in f or "noqui" in f:
+        return "🥔"
+    if "pizza" in f:
+        return "🍕"
+    if "sfija" in f:
+        return "🥟"
+    if "bombita" in f:
+        return "🧆"
+    if "sandwich" in f or "sándwich" in f:
+        return "🥪"
+    if "torta" in f:
+        return "🍰"
+    return "📦"
+
+
 def _precio_para_cliente(producto, cliente):
     if (cliente or {}).get("tipo_cliente") == "Mayorista":
         return _float(producto.get("precio_mayorista") or producto.get("precio_venta"))
@@ -118,7 +139,7 @@ def _ordenar_familias(familias):
     return familias_ordenadas
 
 
-def _resumen_items(productos, familias_ordenadas, familias, cliente):
+def _resumen_items(familias_ordenadas, familias, cliente):
     items = []
     resumen = []
 
@@ -195,67 +216,102 @@ def render():
             familias.setdefault(familia, []).append(p)
 
         familias_ordenadas = _ordenar_familias(familias)
+        items, resumen_familias = _resumen_items(familias_ordenadas, familias, cliente)
 
-        items_pre, resumen_pre = _resumen_items(productos, familias_ordenadas, familias, cliente)
+        st.markdown("### 🧾 Productos por familia")
 
-        st.markdown("### Productos por familia")
+        if "familia_actual_pedido" not in st.session_state:
+            st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
 
-        labels_tabs = []
-        for r in resumen_pre:
-            if r["unidades"] > 0:
-                labels_tabs.append(f"{r['familia']} ({int(r['unidades']) if r['unidades'].is_integer() else r['unidades']})")
+        if st.session_state["familia_actual_pedido"] not in familias_ordenadas:
+            st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
+
+        labels_radio = []
+        label_to_family = {}
+
+        for r in resumen_familias:
+            familia = r["familia"]
+            emoji = _emoji_familia(familia)
+            unidades = r["unidades"]
+            subtotal = r["subtotal"]
+
+            if unidades > 0:
+                cant_txt = int(unidades) if float(unidades).is_integer() else unidades
+                label = f"{emoji} {familia} ({cant_txt}) · {money(subtotal)}"
             else:
-                labels_tabs.append(r["familia"])
+                label = f"{emoji} {familia}"
 
-        tabs = st.tabs(labels_tabs)
+            labels_radio.append(label)
+            label_to_family[label] = familia
 
-        for idx, familia in enumerate(familias_ordenadas):
-            with tabs[idx]:
-                subtotal_familia = next((r["subtotal"] for r in resumen_pre if r["familia"] == familia), 0)
-                unidades_familia = next((r["unidades"] for r in resumen_pre if r["familia"] == familia), 0)
+        current_family = st.session_state["familia_actual_pedido"]
+        current_label_index = 0
+        for i, label in enumerate(labels_radio):
+            if label_to_family[label] == current_family:
+                current_label_index = i
+                break
 
-                c_head1, c_head2 = st.columns([2, 1])
-                with c_head1:
-                    st.markdown(f"#### {familia}")
-                with c_head2:
-                    st.markdown(f"#### {money(subtotal_familia)}")
+        selected_label = st.radio(
+            "Familia",
+            labels_radio,
+            index=current_label_index,
+            horizontal=True,
+            key="radio_familia_pedido"
+        )
 
-                if unidades_familia > 0:
-                    st.success(f"Cantidad cargada en esta familia: {unidades_familia:g}")
-                else:
-                    st.info("Sin productos cargados en esta familia.")
+        familia_actual = label_to_family[selected_label]
+        st.session_state["familia_actual_pedido"] = familia_actual
 
-                for p in familias[familia]:
-                    c1, c2, c3 = st.columns([4, 1, 1])
+        st.markdown(f"### {_emoji_familia(familia_actual)} {familia_actual}")
 
-                    unidad = p.get("unidad") or "unidad"
-                    precio = _precio_para_cliente(p, cliente)
+        productos_familia = familias[familia_actual]
 
-                    c1.write(f"**{p['nombre']}**")
-                    c1.caption(f"{money(precio)} / {unidad}")
+        subtotal_actual = next(
+            (r["subtotal"] for r in resumen_familias if r["familia"] == familia_actual),
+            0.0
+        )
+        unidades_actual = next(
+            (r["unidades"] for r in resumen_familias if r["familia"] == familia_actual),
+            0.0
+        )
 
-                    cant = c2.number_input(
-                        "Cant.",
-                        min_value=0.0,
-                        step=1.0,
-                        key=f"cant_{p['id']}"
-                    )
+        c_fam1, c_fam2 = st.columns(2)
+        c_fam1.metric("Cantidad en familia", f"{unidades_actual:g}")
+        c_fam2.metric("Subtotal familia", money(subtotal_actual))
 
-                    subtotal = cant * precio
-                    c3.write("Subtotal")
-                    c3.markdown(f"**{money(subtotal)}**")
+        st.divider()
 
-        items, resumen_familias = _resumen_items(productos, familias_ordenadas, familias, cliente)
+        for p in productos_familia:
+            c1, c2, c3 = st.columns([4, 1, 1])
+
+            unidad = p.get("unidad") or "unidad"
+            precio = _precio_para_cliente(p, cliente)
+
+            c1.write(f"**{p['nombre']}**")
+            c1.caption(f"{money(precio)} / {unidad}")
+
+            cant = c2.number_input(
+                "Cant.",
+                min_value=0.0,
+                step=1.0,
+                key=f"cant_{p['id']}"
+            )
+
+            subtotal = cant * precio
+            c3.write("Subtotal")
+            c3.markdown(f"**{money(subtotal)}**")
+
+        items, resumen_familias = _resumen_items(familias_ordenadas, familias, cliente)
         total = sum(i["subtotal"] for i in items)
 
         st.divider()
 
         ctot1, ctot2 = st.columns([2, 1])
         with ctot1:
-            st.markdown("### Resumen por familia")
+            st.markdown("### 📋 Resumen por familia")
             resumen_df = [
                 {
-                    "Familia": r["familia"],
+                    "Familia": f"{_emoji_familia(r['familia'])} {r['familia']}",
                     "Cantidad": r["unidades"],
                     "Subtotal": money(r["subtotal"]),
                 }
@@ -269,7 +325,7 @@ def render():
                 st.info("Todavía no cargaste productos.")
 
         with ctot2:
-            st.markdown("### Total pedido")
+            st.markdown("### 🧮 Total pedido")
             st.markdown(f"# {money(total)}")
 
         if tipo_cliente == "Mayorista":
@@ -374,7 +430,7 @@ def render():
                 st.success("Estado actualizado.")
                 st.rerun()
 
-            items = (
+            items_pedido = (
                 db.table(table("pedido_detalles"))
                 .select("producto_nombre,cantidad,precio_unitario,subtotal")
                 .eq("pedido_id", p["id"])
@@ -382,8 +438,8 @@ def render():
                 .data
             )
 
-            if items:
-                st.dataframe(pd.DataFrame(items), use_container_width=True, hide_index=True)
+            if items_pedido:
+                st.dataframe(pd.DataFrame(items_pedido), use_container_width=True, hide_index=True)
 
             if p.get("observaciones"):
                 st.caption(p["observaciones"])
