@@ -39,14 +39,14 @@ def _login_background():
             linear-gradient(rgba(0,0,0,.20), rgba(0,0,0,.32)),
             url("data:image/jpeg;base64,{img_b64}");
         background-size: cover;
-        background-position: center top;
+        background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
 
     .main .block-container {{
-        max-width: 520px !important;
-        padding-top: 30vh !important;
+        max-width: 500px !important;
+        padding-top: 34vh !important;
         padding-bottom: 5vh !important;
     }}
 
@@ -61,7 +61,7 @@ def _login_background():
     /* Tarjeta real del login */
     div[data-testid="stVerticalBlock"] > div:has(input) form,
     div[data-testid="stForm"] {{
-        background: rgba(12, 12, 12, .42) !important;
+        background: rgba(12, 12, 12, .34) !important;
         border: 1px solid rgba(216,155,29,.78) !important;
         border-radius: 26px !important;
         padding: 24px 28px !important;
@@ -70,7 +70,7 @@ def _login_background():
     }}
 
     h1 {{
-        font-size: 72px !important;
+        font-size: 62px !important;
         text-align: center !important;
         color: #FFF7E6 !important;
         text-shadow: 0 4px 18px rgba(0,0,0,.75) !important;
@@ -120,20 +120,6 @@ def _login_background():
 # Antes del login no se muestra menú lateral ni páginas.
 if not is_logged_in():
     _login_background()
-    st.markdown(
-        """
-        <div style='text-align:center;
-                    color:white;
-                    font-size:20px;
-                    font-weight:800;
-                    text-shadow:0 2px 8px rgba(0,0,0,.85);
-                    margin-top:-10px;
-                    margin-bottom:18px;'>
-            🍝 Pastas • Pizzas • Tartas • Congelados
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
     login_box()
     st.stop()
 
