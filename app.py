@@ -70,6 +70,7 @@ def _login_background():
         pointer-events: none;
     }}
 
+<<<<<<< HEAD
     .main .block-container {{
         position: relative;
         z-index: 1;
@@ -79,6 +80,21 @@ def _login_background():
         margin-left: auto !important;
         margin-right: 9vw !important;
     }}
+=======
+.main .block-container {{
+    position: relative;
+    z-index: 1;
+    max-width: 450px !important;
+    padding-top: 48vh !important;
+    padding-bottom: 5vh !important;
+    margin-left: auto !important;
+    margin-right: 7vw !important;
+}}
+
+div[data-testid="stAppViewContainer"] .main .block-container {{
+    transform: translateY(180px) !important;
+}}
+>>>>>>> 90eeec6ba9a3b7a3b214f6235a0de43b520ee3d1
 
     /* Saca el bloque negro gigante de Streamlit */
     div[data-testid="stVerticalBlock"] > div:has(input) {{
@@ -94,13 +110,13 @@ def _login_background():
         background: rgba(12, 12, 12, .48) !important;
         border: 1px solid rgba(216,155,29,.78) !important;
         border-radius: 26px !important;
-        padding: 24px 28px !important;
+        padding: 14px 18px !important;
         box-shadow: 0 18px 45px rgba(0,0,0,.42) !important;
         backdrop-filter: blur(10px) !important;
     }}
 
     h1 {{
-        font-size: 62px !important;
+        font-size: 38px !important;
         text-align: center !important;
         color: #FFF7E6 !important;
         text-shadow: 0 4px 18px rgba(0,0,0,.85) !important;
@@ -126,8 +142,13 @@ def _login_background():
 
     .stButton>button {{
         width: 100%;
+<<<<<<< HEAD
         min-height: 48px;
         font-size: 18px;
+=======
+        min-height: 38px;
+        font-size: 14px;
+>>>>>>> 90eeec6ba9a3b7a3b214f6235a0de43b520ee3d1
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
