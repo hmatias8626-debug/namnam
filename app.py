@@ -46,8 +46,8 @@ def _login_background():
             url("data:image/jpeg;base64,{img_b64}");
         background-size:
             contain,
-            contain,
-            contain;
+            cover,
+            cover;
         background-position:
             center,
             center,
