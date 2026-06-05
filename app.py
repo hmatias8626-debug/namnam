@@ -12,6 +12,7 @@ from modulos.productos import render as render_productos
 from modulos.clientes import render as render_clientes
 from modulos.mayoristas import render as render_mayoristas
 from modulos.pedidos import render as render_pedidos
+from modulos.produccion import render as render_produccion
 from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
@@ -41,13 +42,13 @@ def _login_background():
     */
     .stApp {{
         background-image:
-            linear-gradient(rgba(0,0,0,.05), rgba(0,0,0,.10)),
+            linear-gradient(rgba(0,0,0,.30), rgba(0,0,0,.45)),
             url("data:image/jpeg;base64,{img_b64}"),
             url("data:image/jpeg;base64,{img_b64}");
         background-size:
-            contain,
             cover,
-            cover;
+            cover,
+            contain;
         background-position:
             center,
             center,
@@ -63,20 +64,20 @@ def _login_background():
         content: "";
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,.05);
-        backdrop-filter: blur(0px);
+        background: rgba(0,0,0,.20);
+        backdrop-filter: blur(3px);
         z-index: 0;
         pointer-events: none;
     }}
 
- .main .block-container {{
+    .main .block-container {{
         position: relative;
         z-index: 1;
-        max-width: 450px !important;
-        padding-top: 48vh !important;
+        max-width: 500px !important;
+        padding-top: 27vh !important;
         padding-bottom: 5vh !important;
         margin-left: auto !important;
-        margin-right: 7vw !important;
+        margin-right: 9vw !important;
     }}
 
     /* Saca el bloque negro gigante de Streamlit */
@@ -124,13 +125,13 @@ def _login_background():
     }}
 
     .stButton>button {{
-        width: 50%;
+        width: 100%;
         min-height: 48px;
         font-size: 18px;
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
-        font-weight: 350 !important;
+        font-weight: 950 !important;
         border: 0 !important;
     }}
 
@@ -157,7 +158,7 @@ def _login_background():
 
         .main .block-container {{
             max-width: 92vw !important;
-            padding-top: 70vh !important;
+            padding-top: 36vh !important;
             margin-left: auto !important;
             margin-right: auto !important;
         }}
@@ -183,6 +184,7 @@ MENU = {
     "👥 Clientes": "Clientes",
     "🏪 Mayoristas": "Mayoristas",
     "📝 Pedidos": "Pedidos",
+    "👨‍🍳 Producción": "Producción",
     "📊 Stock": "Stock",
     "💰 Caja": "Caja",
     "🙋 Mi perfil": "Mi perfil",
@@ -213,6 +215,9 @@ elif seccion == "Mayoristas":
 
 elif seccion == "Pedidos":
     render_pedidos()
+
+elif seccion == "Producción":
+    render_produccion()
 
 elif seccion == "Stock":
     render_stock()
