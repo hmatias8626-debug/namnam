@@ -1,0 +1,42 @@
+nombre,categoria,unidad,precio_venta,activo
+Sorrentinos premium - Ternera y queso,Sorrentinos Premium,docena,7500,true
+Sorrentinos premium - Pera y roquefort,Sorrentinos Premium,docena,7500,true
+Sorrentinos - Jamón y queso,Sorrentinos,docena,6500,true
+Sorrentinos - Jamón queso y nuez,Sorrentinos,docena,6500,true
+Sorrentinos - Jamón ricota y queso,Sorrentinos,docena,6500,true
+Sorrentinos - Ricota y nuez,Sorrentinos,docena,6500,true
+Sorrentinos - Calabaza y muzza,Sorrentinos,docena,6500,true
+Sorrentinos - Cebolla caramelizada,Sorrentinos,docena,6500,true
+Sorrentinos - Pollo y verduras,Sorrentinos,docena,6500,true
+Sorrentinos - 4 quesos en masa de remolacha,Sorrentinos,docena,6500,true
+Sorrentinos - 4 quesos en masa de espinaca,Sorrentinos,docena,6500,true
+Sorrentinos - Ricota espinaca y queso,Sorrentinos,docena,6500,true
+Ñoquis comunes,Ñoquis,kilo,6000,true
+Ñoquis de espinaca,Ñoquis,kilo,7000,true
+Ñoquis de remolacha,Ñoquis,kilo,7000,true
+Ñoquis rellenos - Doble muzza,Ñoquis rellenos,kilo,10000,true
+Ñoquis rellenos - Jamón y queso,Ñoquis rellenos,kilo,10000,true
+Ñoquis rellenos - Roquefort,Ñoquis rellenos,kilo,10000,true
+Bombitas de papa - Carne,Bombitas,pack x6,7000,true
+Bombitas de papa - Queso,Bombitas,pack x6,7000,true
+Bombitas de papa - Jamón y queso,Bombitas,pack x6,7000,true
+Tarta individual premium - Ternera tomate y queso,Tartas,unidad,6500,true
+Tarta individual - Jamón y queso,Tartas,unidad,5500,true
+Tarta individual - Capresse,Tartas,unidad,5500,true
+Tarta individual - Pollo y puerro,Tartas,unidad,5500,true
+Tarta individual - Calabaza,Tartas,unidad,5500,true
+Tarta individual - Choclo,Tartas,unidad,5500,true
+Tarta integral - Jamón y queso,Tartas integrales,unidad,5500,true
+Tarta integral - Brócoli,Tartas integrales,unidad,5500,true
+Tarta integral - Espinaca y queso,Tartas integrales,unidad,5500,true
+Tarta integral - Choclo,Tartas integrales,unidad,5500,true
+Tarta integral - Pollo y puerro,Tartas integrales,unidad,5500,true
+Pizza de muzzarella,Pizzas,unidad,5500,true
+Pizza especial,Pizzas,unidad,6500,true
+Pizza premium - Ternera o roquefort,Pizzas,unidad,7500,true
+Sfijas,Sfijas,docena,9000,true
+Sandwich de miga - Jamón y queso,Sandwiches de miga,24 unidades,24000,true
+Sandwich de miga - Salame y queso,Sandwiches de miga,24 unidades,24000,true
+Sandwich de miga - Pollo y huevo,Sandwiches de miga,24 unidades,30000,true
+Sandwich de miga - Ternera y queso,Sandwiches de miga,24 unidades,36000,true
+Torta salada,Tortas,unidad,30000,true
