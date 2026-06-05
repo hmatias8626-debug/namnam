@@ -21,7 +21,7 @@ def apply_theme():
 
     [data-testid="stSidebar"] * {{
         color: #ffffff !important;
-        font-size: 18px !important;
+        font-size: 17px !important;
     }}
 
     [data-testid="stSidebar"] a {{
@@ -29,16 +29,29 @@ def apply_theme():
         font-weight: 700 !important;
         padding: 10px 14px !important;
         border-radius: 12px !important;
+        text-decoration: none !important;
     }}
 
     [data-testid="stSidebar"] a:hover {{
-        background-color: rgba(216,155,29,.25) !important;
+        background-color: rgba(216,155,29,.28) !important;
         color: #ffffff !important;
+    }}
+
+    [data-testid="stSidebar"] div[data-testid="stSidebarNav"] span {{
+        color: #ffffff !important;
+        font-weight: 700 !important;
     }}
 
     [data-testid="stSidebar"] button {{
         color: #111111 !important;
         font-weight: 800 !important;
+    }}
+
+    [data-testid="stSidebar"] small,
+    [data-testid="stSidebar"] .stCaptionContainer,
+    [data-testid="stSidebar"] .stCaptionContainer * {{
+        color: #f4e3b3 !important;
+        font-size: 14px !important;
     }}
 
     h1, h2, h3 {{
@@ -81,7 +94,7 @@ def apply_theme():
 
     .stButton>button {{
         background-color: {COLOR_DORADO};
-        color: #111;
+        color: #111111;
         border-radius: 12px;
         border: 0;
         font-weight: 800;
@@ -89,7 +102,7 @@ def apply_theme():
 
     .stButton>button:hover {{
         background-color: #ffc247;
-        color: #111;
+        color: #111111;
         border: 0;
     }}
 
@@ -98,3 +111,16 @@ def apply_theme():
     }}
     </style>
     """, unsafe_allow_html=True)
+
+
+def header(title: str, subtitle: str = ""):
+    st.markdown(f"<h1 class='nam-title'>{title}</h1>", unsafe_allow_html=True)
+    if subtitle:
+        st.caption(subtitle)
+
+
+def card_metric(label: str, value: str):
+    st.markdown(
+        f"<div class='metric-card'><small>{label}</small><br><b>{value}</b></div>",
+        unsafe_allow_html=True,
+    )
