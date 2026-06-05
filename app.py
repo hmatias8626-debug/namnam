@@ -157,9 +157,9 @@ def _login_background():
 
         .main .block-container {{
             max-width: 92vw !important;
-            padding-top: 36vh !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
+            padding-top: 70vh !important;
+            margin-left: 70% !important;
+            margin-right: 70% !important;
         }}
 
         h1 {{
