@@ -103,7 +103,7 @@ div[data-testid="stAppViewContainer"] .main .block-container {{
     }}
 
     h1 {{
-        font-size: 62px !important;
+        font-size: 38px !important;
         text-align: center !important;
         color: #FFF7E6 !important;
         text-shadow: 0 4px 18px rgba(0,0,0,.85) !important;
@@ -128,9 +128,9 @@ div[data-testid="stAppViewContainer"] .main .block-container {{
     }}
 
     .stButton>button {{
-        width: 50%;
-        min-height: 48px;
-        font-size: 18px;
+        width: 100%;
+        min-height: 38px;
+        font-size: 14px;
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
