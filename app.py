@@ -97,7 +97,7 @@ div[data-testid="stAppViewContainer"] .main .block-container {{
         background: rgba(12, 12, 12, .48) !important;
         border: 1px solid rgba(216,155,29,.78) !important;
         border-radius: 26px !important;
-        padding: 24px 28px !important;
+        padding: 14px 18px !important;
         box-shadow: 0 18px 45px rgba(0,0,0,.42) !important;
         backdrop-filter: blur(10px) !important;
     }}
