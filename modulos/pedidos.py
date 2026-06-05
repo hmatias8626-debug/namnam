@@ -226,60 +226,41 @@ def render():
         if st.session_state["familia_actual_pedido"] not in familias_ordenadas:
             st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
 
-        labels_radio = []
-        label_to_family = {}
-
-        for r in resumen_familias:
-            familia = r["familia"]
-            emoji = _emoji_familia(familia)
-            unidades = r["unidades"]
-            subtotal = r["subtotal"]
-
-            if unidades > 0:
-                cant_txt = int(unidades) if float(unidades).is_integer() else unidades
-                label = f"{emoji} {familia} ({cant_txt}) · {money(subtotal)}"
-            else:
-                label = f"{emoji} {familia}"
-
-            labels_radio.append(label)
-            label_to_family[label] = familia
+        # IMPORTANTE:
+        # Las opciones son estables. No tienen cantidades ni importes en el texto.
+        # Si el texto cambia, Streamlit vuelve a la primera opción.
+        labels_radio = [f"{_emoji_familia(f)} {f}" for f in familias_ordenadas]
+        label_to_family = {f"{_emoji_familia(f)} {f}": f for f in familias_ordenadas}
 
         current_family = st.session_state["familia_actual_pedido"]
-        current_label_index = 0
-        for i, label in enumerate(labels_radio):
-            if label_to_family[label] == current_family:
-                current_label_index = i
-                break
+        current_label = f"{_emoji_familia(current_family)} {current_family}"
+        current_index = labels_radio.index(current_label) if current_label in labels_radio else 0
 
         selected_label = st.radio(
             "Familia",
             labels_radio,
-            index=current_label_index,
+            index=current_index,
             horizontal=True,
-            key="radio_familia_pedido"
+            key="radio_familia_pedido_estable"
         )
 
         familia_actual = label_to_family[selected_label]
         st.session_state["familia_actual_pedido"] = familia_actual
 
+        resumen_actual = next(
+            (r for r in resumen_familias if r["familia"] == familia_actual),
+            {"subtotal": 0, "unidades": 0}
+        )
+
         st.markdown(f"### {_emoji_familia(familia_actual)} {familia_actual}")
 
-        productos_familia = familias[familia_actual]
-
-        subtotal_actual = next(
-            (r["subtotal"] for r in resumen_familias if r["familia"] == familia_actual),
-            0.0
-        )
-        unidades_actual = next(
-            (r["unidades"] for r in resumen_familias if r["familia"] == familia_actual),
-            0.0
-        )
-
         c_fam1, c_fam2 = st.columns(2)
-        c_fam1.metric("Cantidad en familia", f"{unidades_actual:g}")
-        c_fam2.metric("Subtotal familia", money(subtotal_actual))
+        c_fam1.metric("Cantidad en familia", f"{resumen_actual['unidades']:g}")
+        c_fam2.metric("Subtotal familia", money(resumen_actual["subtotal"]))
 
         st.divider()
+
+        productos_familia = familias[familia_actual]
 
         for p in productos_familia:
             c1, c2, c3 = st.columns([4, 1, 1])
