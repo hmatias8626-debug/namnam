@@ -36,7 +36,7 @@ def _login_background():
 
     .stApp {{
         background-image:
-            linear-gradient(rgba(0,0,0,.58), rgba(0,0,0,.72)),
+            linear-gradient(rgba(0,0,0,.20), rgba(0,0,0,.32)),
             url("data:image/jpeg;base64,{img_b64}");
         background-size: cover;
         background-position: center;
@@ -45,39 +45,63 @@ def _login_background():
     }}
 
     .main .block-container {{
-        max-width: 620px !important;
-        padding-top: 8vh !important;
+        max-width: 520px !important;
+        padding-top: 10vh !important;
         padding-bottom: 5vh !important;
     }}
 
+    /* Saca el bloque negro gigante de Streamlit */
     div[data-testid="stVerticalBlock"] > div:has(input) {{
-        background: rgba(8, 8, 8, .68);
-        border: 1px solid rgba(216,155,29,.75);
-        border-radius: 24px;
-        padding: 22px 28px;
-        box-shadow: 0 18px 45px rgba(0,0,0,.55);
-        backdrop-filter: blur(8px);
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }}
 
-    h1, h2, h3, p, label, span {{
+    /* Tarjeta real del login */
+    div[data-testid="stVerticalBlock"] > div:has(input) form,
+    div[data-testid="stForm"] {{
+        background: rgba(12, 12, 12, .42) !important;
+        border: 1px solid rgba(216,155,29,.78) !important;
+        border-radius: 26px !important;
+        padding: 24px 28px !important;
+        box-shadow: 0 18px 45px rgba(0,0,0,.42) !important;
+        backdrop-filter: blur(10px) !important;
+    }}
+
+    h1 {{
+        font-size: 58px !important;
+        text-align: center !important;
+        color: #FFF7E6 !important;
+        text-shadow: 0 4px 18px rgba(0,0,0,.75) !important;
+        margin-bottom: 0 !important;
+    }}
+
+    h2, h3, p, label, span {{
         color: #FFF7E6 !important;
         opacity: 1 !important;
+        text-shadow: 0 2px 8px rgba(0,0,0,.65) !important;
+    }}
+
+    label {{
+        font-weight: 900 !important;
     }}
 
     input {{
         background-color: rgba(255,247,230,.96) !important;
         color: #111111 !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
+        border-radius: 10px !important;
     }}
 
     .stButton>button {{
         width: 100%;
-        min-height: 46px;
+        min-height: 48px;
         font-size: 18px;
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
-        font-weight: 900 !important;
+        font-weight: 950 !important;
         border: 0 !important;
     }}
 
