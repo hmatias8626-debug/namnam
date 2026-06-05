@@ -19,6 +19,40 @@ def _producto_label(p):
     return f"{familia} · {nombre}"
 
 
+def _init_promo_builder():
+    if "promo_builder_items" not in st.session_state:
+        st.session_state["promo_builder_items"] = []
+
+
+def _limpiar_promo_builder():
+    st.session_state["promo_builder_items"] = []
+    for k in list(st.session_state.keys()):
+        if str(k).startswith("promo_builder_"):
+            del st.session_state[k]
+
+
+def _agregar_item_builder(producto, cantidad):
+    _init_promo_builder()
+
+    cantidad = _float(cantidad)
+    if cantidad <= 0:
+        return
+
+    producto_id = producto["id"]
+
+    for item in st.session_state["promo_builder_items"]:
+        if item["producto_id"] == producto_id:
+            item["cantidad"] = _float(item["cantidad"]) + cantidad
+            return
+
+    st.session_state["promo_builder_items"].append({
+        "producto_id": producto_id,
+        "producto_nombre": producto.get("nombre"),
+        "producto_label": _producto_label(producto),
+        "cantidad": cantidad,
+    })
+
+
 def render():
     user = current_user() or {}
     rol = user.get("rol")
@@ -30,8 +64,10 @@ def render():
     header("🏷️ Promociones", "Combos y promos con precio independiente")
 
     db = require_db()
+    _init_promo_builder()
 
     productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
+
     try:
         promos = (
             db.table(table("promos"))
@@ -54,67 +90,108 @@ def render():
         if not productos:
             st.warning("Primero cargá productos.")
         else:
-            with st.form("crear_promo"):
-                nombre = st.text_input("Nombre de la promo", placeholder="Ej: Combo semanal")
-                descripcion = st.text_area("Descripción", placeholder="Ej: 2 docenas + 3 tartas + 12 bombas")
-                precio = st.number_input("Precio promo", min_value=0.0, step=500.0)
-                activo = st.toggle("Activa", value=True)
+            nombre = st.text_input("Nombre de la promo", placeholder="Ej: Combo semanal")
+            descripcion = st.text_area("Descripción", placeholder="Ej: 2 docenas + 3 tartas + 12 bombas")
+            precio = st.number_input("Precio promo", min_value=0.0, step=500.0)
+            activo = st.toggle("Activa", value=True)
 
-                st.markdown("### Productos incluidos")
+            st.markdown("### Productos incluidos")
 
-                producto_opciones = {_producto_label(p): p for p in productos}
-                seleccionados = st.multiselect(
-                    "Elegí los productos que incluye la promo",
-                    list(producto_opciones.keys())
-                )
+            producto_opciones = {_producto_label(p): p for p in productos}
 
-                cantidades = {}
+            c1, c2, c3 = st.columns([4, 1, 1])
 
-                for label in seleccionados:
-                    p = producto_opciones[label]
-                    cantidades[p["id"]] = st.number_input(
-                        f"Cantidad: {label}",
-                        min_value=0.0,
-                        step=1.0,
-                        key=f"cant_promo_new_{p['id']}"
-                    )
+            producto_elegido_label = c1.selectbox(
+                "Producto",
+                list(producto_opciones.keys()),
+                key="promo_builder_producto"
+            )
 
-                guardar = st.form_submit_button("Guardar promo")
+            cantidad = c2.number_input(
+                "Cantidad",
+                min_value=0.0,
+                step=1.0,
+                value=1.0,
+                key="promo_builder_cantidad"
+            )
 
-                if guardar:
-                    if not nombre.strip():
-                        st.warning("Falta el nombre de la promo.")
-                    elif precio <= 0:
-                        st.warning("El precio debe ser mayor a 0.")
-                    elif not seleccionados:
-                        st.warning("Elegí al menos un producto.")
-                    else:
-                        promo = db.table(table("promos")).insert({
-                            "nombre": nombre.strip(),
-                            "descripcion": descripcion.strip(),
-                            "precio": precio,
-                            "activo": activo,
-                        }).execute().data[0]
+            c3.write("")
+            c3.write("")
+            agregar = c3.button("➕ Agregar")
 
-                        detalles = []
+            if agregar:
+                producto = producto_opciones[producto_elegido_label]
+                _agregar_item_builder(producto, cantidad)
+                st.rerun()
 
-                        for label in seleccionados:
-                            p = producto_opciones[label]
-                            cant = _float(cantidades.get(p["id"]))
+            items_builder = st.session_state["promo_builder_items"]
 
-                            if cant > 0:
-                                detalles.append({
-                                    "promo_id": promo["id"],
-                                    "producto_id": p["id"],
-                                    "producto_nombre": p.get("nombre"),
-                                    "cantidad": cant,
-                                })
+            if items_builder:
+                st.markdown("### Detalle armado")
 
-                        if detalles:
-                            db.table(table("promos_detalle")).insert(detalles).execute()
+                df_items = pd.DataFrame([
+                    {
+                        "Producto": item["producto_label"],
+                        "Cantidad": item["cantidad"],
+                    }
+                    for item in items_builder
+                ])
 
-                        st.success("Promo creada.")
+                st.dataframe(df_items, use_container_width=True, hide_index=True)
+
+                st.markdown("#### Quitar productos")
+
+                for idx, item in enumerate(items_builder):
+                    c_item1, c_item2 = st.columns([5, 1])
+                    c_item1.write(f"**{item['producto_label']}** — Cantidad: {item['cantidad']:g}")
+                    if c_item2.button("Quitar", key=f"quitar_item_promo_{idx}"):
+                        st.session_state["promo_builder_items"].pop(idx)
                         st.rerun()
+            else:
+                st.info("Todavía no agregaste productos a la promo.")
+
+            col_guardar, col_limpiar = st.columns([1, 1])
+
+            with col_guardar:
+                guardar = st.button("Guardar promo")
+
+            with col_limpiar:
+                limpiar = st.button("Limpiar detalle")
+
+            if limpiar:
+                _limpiar_promo_builder()
+                st.rerun()
+
+            if guardar:
+                if not nombre.strip():
+                    st.warning("Falta el nombre de la promo.")
+                elif precio <= 0:
+                    st.warning("El precio debe ser mayor a 0.")
+                elif not st.session_state["promo_builder_items"]:
+                    st.warning("Agregá al menos un producto a la promo.")
+                else:
+                    promo = db.table(table("promos")).insert({
+                        "nombre": nombre.strip(),
+                        "descripcion": descripcion.strip(),
+                        "precio": precio,
+                        "activo": activo,
+                    }).execute().data[0]
+
+                    detalles = []
+
+                    for item in st.session_state["promo_builder_items"]:
+                        detalles.append({
+                            "promo_id": promo["id"],
+                            "producto_id": item["producto_id"],
+                            "producto_nombre": item["producto_nombre"],
+                            "cantidad": _float(item["cantidad"]),
+                        })
+
+                    db.table(table("promos_detalle")).insert(detalles).execute()
+
+                    _limpiar_promo_builder()
+                    st.success("Promo creada.")
+                    st.rerun()
 
     with tab2:
         st.subheader("Promociones cargadas")
