@@ -90,216 +90,204 @@ def render():
     productos = [p for p in fetch_table("productos") if p.get("activo")]
     clientes = [c for c in fetch_table("clientes") if c.get("activo")]
 
-    with st.expander("➕ Crear pedido", expanded=True):
-        if not productos:
-            st.warning("Primero cargá productos.")
-        else:
-            cliente_opciones = {_nombre_cliente(c): c for c in clientes}
+    st.subheader("➕ Crear pedido")
 
-            cliente_txt = st.selectbox(
-                "Cliente",
-                ["Venta mostrador / Consumidor Final"] + list(cliente_opciones.keys())
-            )
+    if not productos:
+        st.warning("Primero cargá productos.")
+    else:
+        cliente_opciones = {_nombre_cliente(c): c for c in clientes}
 
-            cliente = None
+        cliente_txt = st.selectbox(
+            "Cliente",
+            ["Venta mostrador / Consumidor Final"] + list(cliente_opciones.keys())
+        )
+
+        cliente = None
+        cliente_id = None
+        cliente_nombre = "Venta mostrador"
+
+        if cliente_txt != "Venta mostrador / Consumidor Final":
+            cliente = cliente_opciones[cliente_txt]
+            cliente_id = cliente["id"]
+            cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
+
+        cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
+
+        if cliente_manual.strip():
+            cliente_nombre = cliente_manual.strip()
             cliente_id = None
-            cliente_nombre = "Venta mostrador"
+            cliente = None
 
-            if cliente_txt != "Venta mostrador / Consumidor Final":
-                cliente = cliente_opciones[cliente_txt]
-                cliente_id = cliente["id"]
-                cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
+        obs = st.text_area("Observaciones")
+        tipo_cliente = (cliente or {}).get("tipo_cliente") or "Minorista"
 
-            cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
+        familias = {}
+        for p in productos:
+            familia = _familia_producto(p)
+            familias.setdefault(familia, []).append(p)
 
-            if cliente_manual.strip():
-                cliente_nombre = cliente_manual.strip()
-                cliente_id = None
-                cliente = None
+        orden_preferido = [
+            "Sorrentinos",
+            "Sorrentinos Premium",
+            "Tartas",
+            "Tartas Individuales",
+            "Tartas Individuales Premium",
+            "Tartas Integrales",
+            "Ñoquis",
+            "Ñoquis comunes",
+            "Ñoquis rellenos",
+            "Pizzas",
+            "Sfijas",
+            "Bombitas de papa",
+            "Sandwiches de miga",
+            "Torta salada",
+            "Otros",
+        ]
 
-            obs = st.text_area("Observaciones")
-            tipo_cliente = (cliente or {}).get("tipo_cliente") or "Minorista"
+        familias_ordenadas = []
+        usadas = set()
 
-            # =========================
-            # PRODUCTOS AGRUPADOS
-            # =========================
+        for f in orden_preferido:
+            for existente in familias.keys():
+                if existente.lower() == f.lower() and existente not in usadas:
+                    familias_ordenadas.append(existente)
+                    usadas.add(existente)
 
-            familias = {}
-            for p in productos:
-                familia = _familia_producto(p)
-                familias.setdefault(familia, []).append(p)
+        for f in sorted(familias.keys()):
+            if f not in usadas:
+                familias_ordenadas.append(f)
 
-            orden_preferido = [
-                "Sorrentinos",
-                "Sorrentinos Premium",
-                "Tartas",
-                "Tartas Individuales",
-                "Tartas Individuales Premium",
-                "Tartas Integrales",
-                "Ñoquis",
-                "Ñoquis comunes",
-                "Ñoquis rellenos",
-                "Pizzas",
-                "Sfijas",
-                "Bombitas de papa",
-                "Sandwiches de miga",
-                "Torta salada",
-                "Otros",
+        st.markdown("### Productos por familia")
+
+        items = []
+        subtotales_familia = {}
+
+        for familia in familias_ordenadas:
+            productos_familia = familias[familia]
+            subtotal_familia = 0.0
+
+            for p in productos_familia:
+                precio_tmp = _precio_para_cliente(p, cliente)
+                cant_tmp = _float(st.session_state.get(f"cant_{p['id']}", 0))
+                subtotal_familia += cant_tmp * precio_tmp
+
+            subtotales_familia[familia] = subtotal_familia
+            titulo = f"{familia} — {money(subtotal_familia)}"
+
+            with st.expander(titulo, expanded=False):
+                for p in productos_familia:
+                    c1, c2, c3 = st.columns([4, 1, 1])
+
+                    unidad = p.get("unidad") or "unidad"
+                    precio = _precio_para_cliente(p, cliente)
+
+                    c1.write(f"**{p['nombre']}**")
+                    c1.caption(f"{money(precio)} / {unidad}")
+
+                    cant = c2.number_input(
+                        "Cant.",
+                        min_value=0.0,
+                        step=1.0,
+                        key=f"cant_{p['id']}"
+                    )
+
+                    subtotal = cant * precio
+
+                    if cant > 0:
+                        items.append({
+                            "producto_id": p["id"],
+                            "producto_nombre": p["nombre"],
+                            "cantidad": cant,
+                            "precio_unitario": precio,
+                            "subtotal": subtotal,
+                        })
+
+                    c3.write("Subtotal")
+                    c3.markdown(f"**{money(subtotal)}**")
+
+        total = sum(i["subtotal"] for i in items)
+
+        st.divider()
+
+        ctot1, ctot2 = st.columns([2, 1])
+        with ctot1:
+            st.markdown("### Resumen por familia")
+            resumen = [
+                {"Familia": f, "Subtotal": money(v)}
+                for f, v in subtotales_familia.items()
+                if v > 0
             ]
 
-            familias_ordenadas = []
-            usadas = set()
-
-            for f in orden_preferido:
-                for existente in familias.keys():
-                    if existente.lower() == f.lower() and existente not in usadas:
-                        familias_ordenadas.append(existente)
-                        usadas.add(existente)
-
-            for f in sorted(familias.keys()):
-                if f not in usadas:
-                    familias_ordenadas.append(f)
-
-            st.markdown("### Productos por familia")
-
-            items = []
-            subtotales_familia = {}
-
-            for familia in familias_ordenadas:
-                productos_familia = familias[familia]
-                subtotal_familia = 0.0
-
-                # Calculamos subtotal actual leyendo los widgets existentes.
-                for p in productos_familia:
-                    precio_tmp = _precio_para_cliente(p, cliente)
-                    cant_tmp = _float(st.session_state.get(f"cant_{p['id']}", 0))
-                    subtotal_familia += cant_tmp * precio_tmp
-
-                subtotales_familia[familia] = subtotal_familia
-
-                titulo = f"{familia} — {money(subtotal_familia)}"
-
-                with st.expander(titulo, expanded=False):
-                    for p in productos_familia:
-                        c1, c2, c3 = st.columns([4, 1, 1])
-
-                        unidad = p.get("unidad") or "unidad"
-                        precio = _precio_para_cliente(p, cliente)
-
-                        c1.write(f"**{p['nombre']}**")
-                        c1.caption(f"{money(precio)} / {unidad}")
-
-                        cant = c2.number_input(
-                            "Cant.",
-                            min_value=0.0,
-                            step=1.0,
-                            key=f"cant_{p['id']}"
-                        )
-
-                        subtotal = cant * precio
-
-                        if cant > 0:
-                            items.append({
-                                "producto_id": p["id"],
-                                "producto_nombre": p["nombre"],
-                                "cantidad": cant,
-                                "precio_unitario": precio,
-                                "subtotal": subtotal,
-                            })
-
-                        c3.write("Subtotal")
-                        c3.markdown(f"**{money(subtotal)}**")
-
-            total = sum(i["subtotal"] for i in items)
-
-            st.divider()
-
-            ctot1, ctot2 = st.columns([2, 1])
-            with ctot1:
-                st.markdown("### Resumen por familia")
-                resumen = [
-                    {"Familia": f, "Subtotal": money(v)}
-                    for f, v in subtotales_familia.items()
-                    if v > 0
-                ]
-
-                if resumen:
-                    st.dataframe(pd.DataFrame(resumen), use_container_width=True, hide_index=True)
-                else:
-                    st.info("Todavía no cargaste productos.")
-
-            with ctot2:
-                st.markdown("### Total pedido")
-                st.markdown(f"# {money(total)}")
-
-            # =========================
-            # COBRO
-            # =========================
-
-            if tipo_cliente == "Mayorista":
-                forma_cobro = st.radio("Cobro", FORMAS_MAYORISTA, horizontal=True)
-
-                if forma_cobro == "Cobrar ahora":
-                    forma_pago = st.selectbox(
-                        "Forma de pago",
-                        ["Efectivo", "Transferencia", "Mercado Pago"]
-                    )
-                else:
-                    forma_pago = "Saldo mayorista"
-                    saldo = _float(cliente.get("saldo_cuenta_corriente") if cliente else 0)
-                    disponible_final = saldo - total
-
-                    if disponible_final < 0:
-                        st.error(f"⚠ Este pedido deja deuda de {money(abs(disponible_final))}")
-                    else:
-                        st.success(f"Saldo luego del pedido: {money(disponible_final)}")
+            if resumen:
+                st.dataframe(pd.DataFrame(resumen), use_container_width=True, hide_index=True)
             else:
-                forma_pago = st.selectbox("Forma de pago", FORMAS_MINORISTA)
-                forma_cobro = "Cobrado" if forma_pago != "Pendiente" else "Pendiente"
+                st.info("Todavía no cargaste productos.")
 
-            if st.button("Guardar pedido"):
-                if not items:
-                    st.warning("Agregá al menos un producto.")
+        with ctot2:
+            st.markdown("### Total pedido")
+            st.markdown(f"# {money(total)}")
+
+        if tipo_cliente == "Mayorista":
+            forma_cobro = st.radio("Cobro", FORMAS_MAYORISTA, horizontal=True)
+
+            if forma_cobro == "Cobrar ahora":
+                forma_pago = st.selectbox(
+                    "Forma de pago",
+                    ["Efectivo", "Transferencia", "Mercado Pago"]
+                )
+            else:
+                forma_pago = "Saldo mayorista"
+                saldo = _float(cliente.get("saldo_cuenta_corriente") if cliente else 0)
+                disponible_final = saldo - total
+
+                if disponible_final < 0:
+                    st.error(f"⚠ Este pedido deja deuda de {money(abs(disponible_final))}")
                 else:
-                    tipo_cobro = "Pendiente"
-                    pagado = False
+                    st.success(f"Saldo luego del pedido: {money(disponible_final)}")
+        else:
+            forma_pago = st.selectbox("Forma de pago", FORMAS_MINORISTA)
+            forma_cobro = "Cobrado" if forma_pago != "Pendiente" else "Pendiente"
 
-                    if tipo_cliente == "Mayorista" and forma_cobro == "Usar saldo mayorista":
-                        tipo_cobro = "Cuenta corriente"
-                        pagado = True
-                    elif forma_pago != "Pendiente":
-                        tipo_cobro = "Cobrado"
-                        pagado = True
+        if st.button("Guardar pedido"):
+            if not items:
+                st.warning("Agregá al menos un producto.")
+            else:
+                tipo_cobro = "Pendiente"
+                pagado = False
 
-                    pedido = db.table(table("pedidos")).insert({
-                        "cliente_id": cliente_id,
-                        "cliente_nombre": cliente_nombre,
-                        "estado": "Pendiente",
-                        "total": total,
-                        "observaciones": obs,
-                        "pagado": pagado,
-                        "forma_pago": forma_pago,
-                        "tipo_cobro": tipo_cobro,
-                    }).execute().data[0]
+                if tipo_cliente == "Mayorista" and forma_cobro == "Usar saldo mayorista":
+                    tipo_cobro = "Cuenta corriente"
+                    pagado = True
+                elif forma_pago != "Pendiente":
+                    tipo_cobro = "Cobrado"
+                    pagado = True
 
-                    for it in items:
-                        it["pedido_id"] = pedido["id"]
+                pedido = db.table(table("pedidos")).insert({
+                    "cliente_id": cliente_id,
+                    "cliente_nombre": cliente_nombre,
+                    "estado": "Pendiente",
+                    "total": total,
+                    "observaciones": obs,
+                    "pagado": pagado,
+                    "forma_pago": forma_pago,
+                    "tipo_cobro": tipo_cobro,
+                }).execute().data[0]
 
-                    db.table(table("pedido_detalles")).insert(items).execute()
+                for it in items:
+                    it["pedido_id"] = pedido["id"]
 
-                    if tipo_cobro == "Cobrado":
-                        _registrar_caja(db, pedido, forma_pago)
+                db.table(table("pedido_detalles")).insert(items).execute()
 
-                    if tipo_cobro == "Cuenta corriente":
-                        _usar_saldo_mayorista(db, pedido)
+                if tipo_cobro == "Cobrado":
+                    _registrar_caja(db, pedido, forma_pago)
 
-                    st.success("Pedido guardado.")
-                    st.rerun()
+                if tipo_cobro == "Cuenta corriente":
+                    _usar_saldo_mayorista(db, pedido)
 
-    # =========================
-    # LISTADO DE PEDIDOS
-    # =========================
+                st.success("Pedido guardado.")
+                st.rerun()
 
+    st.divider()
     st.subheader("Pedidos")
     pedidos = fetch_table("pedidos", "fecha")
 
