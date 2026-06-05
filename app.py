@@ -72,7 +72,7 @@ def _login_background():
     .main .block-container {{
         position: relative;
         z-index: 1;
-        max-width: 500px !important;
+        max-width: 100px !important;
         padding-top: 27vh !important;
         padding-bottom: 5vh !important;
         margin-left: auto !important;
