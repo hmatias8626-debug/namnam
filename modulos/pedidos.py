@@ -256,9 +256,21 @@ def render():
     db = require_db()
     _init_pedido_cantidades()
 
-    productos = [p for p in fetch_table("productos") if p.get("activo")]
-    clientes = [c for c in fetch_table("clientes") if c.get("activo")]
-    promos = [p for p in fetch_table("promos") if p.get("activo")]
+    productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
+    clientes = [c for c in fetch_table("clientes", "id") if c.get("activo")]
+    try:
+        promos = (
+            db.table(table("promos"))
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        st.warning("No pude leer promociones. El pedido puede continuar solo con productos.")
+        promos = []
 
     st.subheader("➕ Crear pedido")
 

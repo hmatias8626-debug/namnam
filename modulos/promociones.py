@@ -31,8 +31,20 @@ def render():
 
     db = require_db()
 
-    productos = [p for p in fetch_table("productos") if p.get("activo")]
-    promos = fetch_table("promos")
+    productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
+    try:
+        promos = (
+            db.table(table("promos"))
+            .select("*")
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception as e:
+        st.error("No pude leer la tabla de promociones.")
+        st.exception(e)
+        promos = []
 
     tab1, tab2 = st.tabs(["➕ Nueva promo", "🏷️ Promos cargadas"])
 
