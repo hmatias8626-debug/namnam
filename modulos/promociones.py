@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from services.auth import current_user
-from services.db import require_db, fetch_table, table, money
+from services.db import require_db, fetch_table, money
 from services.ui import header
 
 
@@ -70,7 +70,7 @@ def render():
 
     try:
         promos = (
-            db.table(table("promos"))
+            db.table("namnam_promos")
             .select("*")
             .order("id")
             .execute()
@@ -170,7 +170,7 @@ def render():
                 elif not st.session_state["promo_builder_items"]:
                     st.warning("Agregá al menos un producto a la promo.")
                 else:
-                    promo = db.table(table("promos")).insert({
+                    promo = db.table("namnam_promos").insert({
                         "nombre": nombre.strip(),
                         "descripcion": descripcion.strip(),
                         "precio": precio,
@@ -187,7 +187,7 @@ def render():
                             "cantidad": _float(item["cantidad"]),
                         })
 
-                    db.table(table("promos_detalle")).insert(detalles).execute()
+                    db.table("namnam_promos_detalle").insert(detalles).execute()
 
                     _limpiar_promo_builder()
                     st.success("Promo creada.")
@@ -217,11 +217,11 @@ def render():
                 )
 
                 if activo != bool(promo.get("activo", True)):
-                    db.table(table("promos")).update({"activo": activo}).eq("id", promo["id"]).execute()
+                    db.table("namnam_promos").update({"activo": activo}).eq("id", promo["id"]).execute()
                     st.rerun()
 
                 detalles = (
-                    db.table(table("promos_detalle"))
+                    db.table("namnam_promos_detalle")
                     .select("*")
                     .eq("promo_id", promo["id"])
                     .execute()
@@ -267,7 +267,7 @@ def render():
                     col_g, col_b = st.columns([1, 1])
 
                     if col_g.button("Guardar cambios", key=f"guardar_promo_{promo['id']}"):
-                        db.table(table("promos")).update({
+                        db.table("namnam_promos").update({
                             "nombre": nuevo_nombre.strip(),
                             "descripcion": nueva_descripcion.strip(),
                             "precio": nuevo_precio,
@@ -278,7 +278,7 @@ def render():
                         st.rerun()
 
                     if col_b.button("Eliminar promo", key=f"borrar_promo_{promo['id']}"):
-                        db.table(table("promos_detalle")).delete().eq("promo_id", promo["id"]).execute()
-                        db.table(table("promos")).delete().eq("id", promo["id"]).execute()
+                        db.table("namnam_promos_detalle").delete().eq("promo_id", promo["id"]).execute()
+                        db.table("namnam_promos").delete().eq("id", promo["id"]).execute()
                         st.success("Promo eliminada.")
                         st.rerun()

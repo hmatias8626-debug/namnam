@@ -260,7 +260,7 @@ def render():
     clientes = [c for c in fetch_table("clientes", "id") if c.get("activo")]
     try:
         promos = (
-            db.table(table("promos"))
+            db.table("namnam_promos")
             .select("*")
             .eq("activo", True)
             .order("id")
@@ -423,7 +423,7 @@ def render():
                         c3.success(f"Subtotal: {money(_float(cant) * _float(promo.get('precio')))}")
 
                     detalles = (
-                        db.table(table("promos_detalle"))
+                        db.table("namnam_promos_detalle")
                         .select("*")
                         .eq("promo_id", promo_id)
                         .execute()
