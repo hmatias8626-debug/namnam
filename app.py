@@ -73,7 +73,7 @@ def _login_background():
         position: relative;
         z-index: 1;
         max-width: 100px !important;
-        padding-top: 40vh !important;
+        padding-top: 10vh !important;
         padding-bottom: 5vh !important;
         margin-left: auto !important;
         margin-right: 9vw !important;
