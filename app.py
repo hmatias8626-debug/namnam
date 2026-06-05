@@ -45,8 +45,8 @@ def _login_background():
     }}
 
     .main .block-container {{
-        max-width: 500px !important;
-        padding-top: 34vh !important;
+        max-width: 520px !important;
+        padding-top: 50vh !important;
         padding-bottom: 5vh !important;
     }}
 
@@ -61,7 +61,7 @@ def _login_background():
     /* Tarjeta real del login */
     div[data-testid="stVerticalBlock"] > div:has(input) form,
     div[data-testid="stForm"] {{
-        background: rgba(12, 12, 12, .34) !important;
+        background: rgba(12, 12, 12, .42) !important;
         border: 1px solid rgba(216,155,29,.78) !important;
         border-radius: 26px !important;
         padding: 24px 28px !important;
@@ -70,7 +70,7 @@ def _login_background():
     }}
 
     h1 {{
-        font-size: 62px !important;
+        font-size: 58px !important;
         text-align: center !important;
         color: #FFF7E6 !important;
         text-shadow: 0 4px 18px rgba(0,0,0,.75) !important;
