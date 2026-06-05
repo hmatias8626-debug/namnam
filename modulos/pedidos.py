@@ -139,7 +139,39 @@ def _ordenar_familias(familias):
     return familias_ordenadas
 
 
+def _init_pedido_cantidades():
+    if "pedido_cantidades" not in st.session_state:
+        st.session_state["pedido_cantidades"] = {}
+
+
+def _get_cantidad(producto_id):
+    _init_pedido_cantidades()
+    return _float(st.session_state["pedido_cantidades"].get(str(producto_id), 0))
+
+
+def _set_cantidad(producto_id, value):
+    _init_pedido_cantidades()
+    value = _float(value)
+    key = str(producto_id)
+    if value <= 0:
+        st.session_state["pedido_cantidades"].pop(key, None)
+    else:
+        st.session_state["pedido_cantidades"][key] = value
+
+
+def _sync_cantidad_widget(producto_id, widget_key):
+    _set_cantidad(producto_id, st.session_state.get(widget_key, 0))
+
+
+def _limpiar_pedido():
+    st.session_state["pedido_cantidades"] = {}
+    for k in list(st.session_state.keys()):
+        if str(k).startswith("cant_widget_"):
+            del st.session_state[k]
+
+
 def _resumen_items(familias_ordenadas, familias, cliente):
+    _init_pedido_cantidades()
     items = []
     resumen = []
 
@@ -149,7 +181,7 @@ def _resumen_items(familias_ordenadas, familias, cliente):
 
         for p in familias[familia]:
             precio = _precio_para_cliente(p, cliente)
-            cant = _float(st.session_state.get(f"cant_{p['id']}", 0))
+            cant = _get_cantidad(p["id"])
             subtotal = cant * precio
 
             if cant > 0:
@@ -175,6 +207,7 @@ def _resumen_items(familias_ordenadas, familias, cliente):
 def render():
     header("📝 Pedidos", "Crear pedido por familias, cobrar o descontar saldo mayorista")
     db = require_db()
+    _init_pedido_cantidades()
 
     productos = [p for p in fetch_table("productos") if p.get("activo")]
     clientes = [c for c in fetch_table("clientes") if c.get("activo")]
@@ -226,9 +259,6 @@ def render():
         if st.session_state["familia_actual_pedido"] not in familias_ordenadas:
             st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
 
-        # IMPORTANTE:
-        # Las opciones son estables. No tienen cantidades ni importes en el texto.
-        # Si el texto cambia, Streamlit vuelve a la primera opción.
         labels_radio = [f"{_emoji_familia(f)} {f}" for f in familias_ordenadas]
         label_to_family = {f"{_emoji_familia(f)} {f}": f for f in familias_ordenadas}
 
@@ -267,6 +297,11 @@ def render():
 
             unidad = p.get("unidad") or "unidad"
             precio = _precio_para_cliente(p, cliente)
+            producto_id = p["id"]
+            widget_key = f"cant_widget_{producto_id}"
+
+            if widget_key not in st.session_state:
+                st.session_state[widget_key] = _get_cantidad(producto_id)
 
             c1.write(f"**{p['nombre']}**")
             c1.caption(f"{money(precio)} / {unidad}")
@@ -275,10 +310,12 @@ def render():
                 "Cant.",
                 min_value=0.0,
                 step=1.0,
-                key=f"cant_{p['id']}"
+                key=widget_key,
+                on_change=_sync_cantidad_widget,
+                args=(producto_id, widget_key),
             )
 
-            subtotal = cant * precio
+            subtotal = _float(cant) * precio
             c3.write("Subtotal")
             c3.markdown(f"**{money(subtotal)}**")
 
@@ -330,7 +367,19 @@ def render():
             forma_pago = st.selectbox("Forma de pago", FORMAS_MINORISTA)
             forma_cobro = "Cobrado" if forma_pago != "Pendiente" else "Pendiente"
 
-        if st.button("Guardar pedido"):
+        col_guardar, col_limpiar = st.columns([1, 1])
+
+        with col_guardar:
+            guardar = st.button("Guardar pedido")
+
+        with col_limpiar:
+            limpiar = st.button("Limpiar cantidades")
+
+        if limpiar:
+            _limpiar_pedido()
+            st.rerun()
+
+        if guardar:
             if not items:
                 st.warning("Agregá al menos un producto.")
             else:
@@ -366,6 +415,7 @@ def render():
                 if tipo_cobro == "Cuenta corriente":
                     _usar_saldo_mayorista(db, pedido)
 
+                _limpiar_pedido()
                 st.success("Pedido guardado.")
                 st.rerun()
 
