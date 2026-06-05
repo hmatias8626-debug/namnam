@@ -77,6 +77,9 @@ def _login_background():
         padding-bottom: 5vh !important;
         margin-left: auto !important;
         margin-right: 7vw !important;
+        div[data-testid="stAppViewContainer"] .main .block-container {
+    transform: translateY(180px) !important;
+}
     }}
 
     /* Saca el bloque negro gigante de Streamlit */
