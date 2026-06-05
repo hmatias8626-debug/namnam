@@ -15,10 +15,10 @@ def _nombre_cliente(c):
     return f"{completo} - {tel}" if tel else (completo or f"Cliente #{c.get('id')}")
 
 def render():
-    header("💰 Caja", "Ingresos, egresos, cobros y pagos de mayoristas")
+    header("💰 Caja", "Ingresos, egresos y carga de saldo mayorista")
     db = require_db()
 
-    tab1, tab2 = st.tabs(["Movimiento manual", "Pago de mayorista"])
+    tab1, tab2 = st.tabs(["Movimiento manual", "Cargar saldo mayorista"])
 
     with tab1:
         with st.form("mov_caja", clear_on_submit=True):
@@ -54,46 +54,47 @@ def render():
             cliente_txt = st.selectbox("Cliente mayorista", list(opciones.keys()))
             cliente = opciones[cliente_txt]
             saldo = _float(cliente.get("saldo_cuenta_corriente"))
-            limite = _float(cliente.get("limite_credito"))
-            disponible = limite - saldo
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Límite", money(limite))
-            c2.metric("Saldo usado", money(saldo))
-            c3.metric("Disponible", money(disponible))
 
-            with st.form("pago_mayorista", clear_on_submit=True):
+            st.metric("Saldo disponible actual", money(saldo))
+
+            with st.form("carga_saldo_mayorista", clear_on_submit=True):
                 p1, p2 = st.columns(2)
-                importe = p1.number_input("Importe pagado", min_value=0.0, step=100.0)
+                importe = p1.number_input("Importe que carga el cliente", min_value=0.0, step=100.0)
                 forma_pago = p2.selectbox("Forma de pago", ["Efectivo", "Transferencia", "Mercado Pago", "Otro"])
                 obs = st.text_area("Observaciones")
-                if st.form_submit_button("Registrar pago"):
+
+                if st.form_submit_button("Cargar saldo"):
                     if importe <= 0:
                         st.warning("El importe debe ser mayor a cero.")
                     else:
                         db.table(table("caja")).insert({
                             "tipo": "Ingreso",
-                            "concepto": f"Pago cuenta corriente - {_nombre_cliente(cliente)}",
+                            "concepto": f"Carga saldo mayorista - {_nombre_cliente(cliente)}",
                             "importe": importe,
                             "observaciones": obs.strip(),
                             "cliente_id": cliente["id"],
                             "forma_pago": forma_pago,
                             "medio": forma_pago,
                         }).execute()
+
                         db.table("namnam_credito_movimientos").insert({
                             "cliente_id": cliente["id"],
                             "tipo": "Pago",
                             "importe": importe,
-                            "observaciones": obs.strip() or "Pago registrado desde caja",
+                            "observaciones": obs.strip() or "Carga de saldo desde caja",
                         }).execute()
+
                         db.table(table("clientes")).update({
-                            "saldo_cuenta_corriente": saldo - importe
+                            "saldo_cuenta_corriente": saldo + importe
                         }).eq("id", cliente["id"]).execute()
-                        st.success("Pago registrado y cuenta corriente actualizada.")
+
+                        st.success("Saldo mayorista cargado correctamente.")
                         st.rerun()
 
     movs = fetch_table("caja", "fecha")
     ingresos = sum(_float(m.get("importe")) for m in movs if m.get("tipo") == "Ingreso")
     egresos = sum(_float(m.get("importe")) for m in movs if m.get("tipo") == "Egreso")
+
     st.divider()
     c1, c2, c3 = st.columns(3)
     with c1:

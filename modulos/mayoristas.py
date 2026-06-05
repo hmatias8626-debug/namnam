@@ -1,6 +1,6 @@
 import pandas as pd
 import streamlit as st
-from services.db import require_db, fetch_table, table, money
+from services.db import require_db, money
 from services.ui import header
 
 def _nombre_completo(cliente: dict) -> str:
@@ -10,58 +10,57 @@ def _nombre_completo(cliente: dict) -> str:
     return completo or f"Cliente #{cliente.get('id')}"
 
 def render():
-    header("🏪 Mayoristas", "Cuenta corriente, crédito disponible e historial de movimientos")
+    header("🏪 Mayoristas", "Saldo disponible, consumos e historial")
     db = require_db()
 
     try:
-        mayoristas = fetch_table("mayoristas_credito")
-    except Exception:
-        st.warning("Todavía no existe la vista namnam_mayoristas_credito. Ejecutá primero el SQL de mayoristas/crédito en Supabase.")
-        mayoristas = []
+        mayoristas = db.table("namnam_mayoristas_credito").select("*").execute().data
+    except Exception as e:
+        st.warning("No pude leer la vista namnam_mayoristas_credito. Ejecutá el SQL actualizado en Supabase.")
+        st.exception(e)
+        return
 
     if not mayoristas:
         st.info("Todavía no hay clientes mayoristas cargados.")
         st.caption("Cargalos desde Clientes seleccionando tipo Mayorista.")
         return
 
-    total_credito = sum(float(c.get("limite_credito") or 0) for c in mayoristas)
-    total_usado = sum(float(c.get("saldo_cuenta_corriente") or 0) for c in mayoristas)
-    total_disponible = total_credito - total_usado
+    total_saldo = sum(float(c.get("saldo_cuenta_corriente") or 0) for c in mayoristas)
     excedidos = sum(1 for c in mayoristas if c.get("excedido"))
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2 = st.columns(2)
     c1.metric("Mayoristas", len(mayoristas))
-    c2.metric("Crédito total", money(total_credito))
-    c3.metric("Saldo usado", money(total_usado))
-    c4.metric("Disponible", money(total_disponible))
+    c2.metric("Saldo total disponible", money(total_saldo))
 
     if excedidos:
-        st.error(f"⚠ Hay {excedidos} mayorista(s) excedidos de crédito.")
+        st.error(f"⚠ Hay {excedidos} mayorista(s) con saldo negativo.")
 
     st.divider()
     st.subheader("Listado de mayoristas")
 
     for c in mayoristas:
-        disponible = float(c.get("credito_disponible") or 0)
         saldo = float(c.get("saldo_cuenta_corriente") or 0)
-        limite = float(c.get("limite_credito") or 0)
         excedido = bool(c.get("excedido"))
 
         with st.container(border=True):
             titulo = _nombre_completo(c)
-            estado = "🔴 Excedido" if excedido else "🟢 Normal"
+            estado = "🔴 Debe" if excedido else "🟢 Con saldo"
             st.markdown(f"### {titulo} — {estado}")
 
-            a, b, ccol, d = st.columns(4)
-            a.metric("Límite crédito", money(limite))
-            b.metric("Usado", money(saldo))
-            ccol.metric("Disponible", money(disponible))
+            a, b, d = st.columns(3)
+            if saldo < 0:
+                a.error(f"Debe: {money(abs(saldo))}")
+                b.metric("Saldo disponible", money(saldo))
+            else:
+                a.success(f"Saldo disponible: {money(saldo)}")
+                b.metric("Saldo a favor", money(saldo))
+
             d.write(f"📞 {c.get('telefono') or '-'}")
             d.write(f"📍 {c.get('direccion') or '-'}")
 
             cliente_id = c.get("id")
 
-            with st.expander("Ver / cargar movimientos"):
+            with st.expander("Historial de movimientos"):
                 try:
                     movimientos = (
                         db.table("namnam_credito_movimientos")
@@ -71,9 +70,10 @@ def render():
                         .execute()
                         .data
                     )
-                except Exception:
+                except Exception as e:
                     movimientos = []
-                    st.warning("No pude leer namnam_credito_movimientos. Verificá que ejecutaste el SQL correspondiente.")
+                    st.warning("No pude leer namnam_credito_movimientos.")
+                    st.exception(e)
 
                 if movimientos:
                     df = pd.DataFrame(movimientos)
