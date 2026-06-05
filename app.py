@@ -124,13 +124,13 @@ def _login_background():
     }}
 
     .stButton>button {{
-        width: 100%;
+        width: 50%;
         min-height: 48px;
         font-size: 18px;
         background-color: #D89B1D !important;
         color: #111111 !important;
         border-radius: 14px !important;
-        font-weight: 950 !important;
+        font-weight: 350 !important;
         border: 0 !important;
     }}
 
