@@ -2,7 +2,6 @@ import urllib.parse
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 from services.db import require_db, fetch_table, table, money
 
@@ -309,42 +308,72 @@ def _css():
 
 
 
-
-def _redirigir_whatsapp(url):
-    # Intento 1: redirección por meta refresh.
-    # Intento 2: redirección por JavaScript al top-level.
-    # En algunos navegadores puede ser bloqueado por seguridad; si pasa, queda fallback manual.
-    st.markdown(
-        f"""
-        <meta http-equiv="refresh" content="0; url={url}">
-        <script>
-            try {{
-                window.top.location.href = "{url}";
-            }} catch (e) {{
-                window.location.href = "{url}";
-            }}
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
-
 def _mostrar_confirmacion_final():
+    resumen = st.session_state.get("pedido_online_resumen") or {}
     wa_url = st.session_state.get("pedido_online_wa_url") or ""
 
-    _redirigir_whatsapp(wa_url)
+    st.success("✅ Pedido registrado correctamente. Tocá el botón para enviarlo por WhatsApp y confirmar.")
 
-    # Fallback mínimo por si el navegador bloquea la redirección automática.
-    st.markdown("### Redirigiendo a WhatsApp...")
     st.markdown(
         f"""
         <div class="whatsapp-btn">
-            <a href="{wa_url}" target="_self">
-                Abrir WhatsApp
+            <a href="{wa_url}" target="_blank">
+                📲 Enviar pedido por WhatsApp para confirmar
             </a>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    st.divider()
+    st.markdown("## 🧾 Resumen del pedido")
+
+    pedido_id = resumen.get("pedido_id")
+    if pedido_id:
+        st.markdown(f"### Pedido #{pedido_id}")
+
+    datos = [
+        {"Dato": "Cliente", "Valor": resumen.get("nombre", "")},
+        {"Dato": "Teléfono", "Valor": resumen.get("telefono", "")},
+        {"Dato": "Forma de pago", "Valor": resumen.get("forma_pago", "")},
+        {"Dato": "Entrega", "Valor": resumen.get("tipo_entrega", "")},
+    ]
+
+    if resumen.get("tipo_entrega") == "Retira en local":
+        datos.append({"Dato": "Retira en", "Valor": resumen.get("punto_retiro", "")})
+    else:
+        datos.append({"Dato": "Dirección", "Valor": resumen.get("direccion", "")})
+        if resumen.get("barrio"):
+            datos.append({"Dato": "Barrio", "Valor": resumen.get("barrio", "")})
+        if resumen.get("referencia"):
+            datos.append({"Dato": "Referencia", "Valor": resumen.get("referencia", "")})
+
+    datos.append({"Dato": "Fecha", "Valor": resumen.get("fecha") or "A coordinar"})
+    datos.append({"Dato": "Hora", "Valor": resumen.get("hora") or "A coordinar"})
+
+    st.dataframe(pd.DataFrame(datos), use_container_width=True, hide_index=True)
+
+    items_resumen = resumen.get("items") or []
+    if items_resumen:
+        st.markdown("### Productos")
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "Producto": i.get("producto_nombre"),
+                    "Cantidad": i.get("cantidad"),
+                    "Subtotal": money(i.get("subtotal")),
+                }
+                for i in items_resumen
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.markdown(f"## Total: {money(resumen.get('total', 0))}")
+
+    if st.button("Hacer otro pedido"):
+        _limpiar_carrito()
+        st.rerun()
 
 
 def render():
