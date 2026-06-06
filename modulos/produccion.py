@@ -219,10 +219,15 @@ def render():
                     lote_id = _crear_lote_id(seleccionados)
 
                     for pedido_id in ids:
-                        db.table(table("pedidos")).update({
-                            "estado": "En Producción",
-                            "produccion_lote": lote_id,
-                        }).eq("id", pedido_id).execute()
+    try:
+        db.table(table("pedidos")).update({
+            "estado": "En Producción",
+            "produccion_lote": lote_id,
+        }).eq("id", pedido_id).execute()
+    except Exception as e:
+        st.error(f"Error actualizando pedido #{pedido_id}")
+        st.exception(e)
+        st.stop()
 
                     st.success(f"Lote tomado: {lote_id}")
                     st.rerun()
