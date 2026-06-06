@@ -13,6 +13,30 @@ def _float(v):
         return 0.0
 
 
+def _familia_producto(p):
+    familia = (
+        p.get("familia")
+        or p.get("categoria")
+        or p.get("categoría")
+        or p.get("rubro")
+        or p.get("grupo")
+        or "Sin familia"
+    )
+    familia = str(familia).strip()
+    return familia if familia else "Sin familia"
+
+
+def _producto_nombre_produccion(producto_id, nombre, productos_por_id):
+    producto = productos_por_id.get(producto_id)
+
+    if producto:
+        familia = _familia_producto(producto)
+        nombre_producto = producto.get("nombre") or nombre or f"Producto #{producto_id}"
+        return f"{familia} · {nombre_producto}"
+
+    return nombre or f"Producto #{producto_id}"
+
+
 def _leer_items_pedidos(db, pedidos_ids):
     if not pedidos_ids:
         return []
@@ -41,16 +65,10 @@ def _leer_detalle_promo(db, promo_id):
     )
 
 
-def _resumen_produccion(db, items):
+def _resumen_produccion(db, items, productos_por_id):
     """
     Producción NO ve promos ni precios.
-    Ve productos reales a fabricar.
-
-    Si el detalle es producto:
-        suma ese producto.
-
-    Si el detalle es promo:
-        busca namnam_promos_detalle y multiplica por la cantidad de promos vendidas.
+    Ve productos reales a fabricar, con familia + nombre.
     """
     resumen = {}
 
@@ -67,31 +85,39 @@ def _resumen_produccion(db, items):
 
             for d in detalle_promo:
                 producto_id = d.get("producto_id")
-                nombre = d.get("producto_nombre") or f"Producto #{producto_id}"
+                nombre = _producto_nombre_produccion(
+                    producto_id,
+                    d.get("producto_nombre"),
+                    productos_por_id
+                )
                 cantidad = _float(d.get("cantidad")) * cantidad_linea
 
                 key = producto_id or nombre
 
                 if key not in resumen:
                     resumen[key] = {
-                        "Producto": nombre,
-                        "Cantidad a producir": 0.0,
+                        "Producto a producir": nombre,
+                        "Cantidad": 0.0,
                     }
 
-                resumen[key]["Cantidad a producir"] += cantidad
+                resumen[key]["Cantidad"] += cantidad
 
         else:
             producto_id = it.get("producto_id")
-            nombre = it.get("producto_nombre") or f"Producto #{producto_id}"
+            nombre = _producto_nombre_produccion(
+                producto_id,
+                it.get("producto_nombre"),
+                productos_por_id
+            )
             key = producto_id or nombre
 
             if key not in resumen:
                 resumen[key] = {
-                    "Producto": nombre,
-                    "Cantidad a producir": 0.0,
+                    "Producto a producir": nombre,
+                    "Cantidad": 0.0,
                 }
 
-            resumen[key]["Cantidad a producir"] += cantidad_linea
+            resumen[key]["Cantidad"] += cantidad_linea
 
     return list(resumen.values())
 
@@ -129,8 +155,10 @@ def render():
 
     try:
         pedidos = fetch_table("pedidos", "fecha")
+        productos = fetch_table("productos", "id")
+        productos_por_id = {p.get("id"): p for p in productos}
     except Exception as e:
-        st.error("No pude leer pedidos.")
+        st.error("No pude leer pedidos o productos.")
         st.exception(e)
         return
 
@@ -169,7 +197,7 @@ def render():
             if seleccionados:
                 ids = [p["id"] for p in seleccionados]
                 items = _leer_items_pedidos(db, ids)
-                resumen = _resumen_produccion(db, items)
+                resumen = _resumen_produccion(db, items, productos_por_id)
 
                 st.divider()
                 st.subheader("Resumen del lote a tomar")
@@ -215,7 +243,7 @@ def render():
                     st.caption(f"Pedidos: {', '.join('#' + str(i) for i in pedidos_ids)}")
 
                     items = _leer_items_pedidos(db, pedidos_ids)
-                    resumen = _resumen_produccion(db, items)
+                    resumen = _resumen_produccion(db, items, productos_por_id)
 
                     st.markdown("### Productos a producir")
 
