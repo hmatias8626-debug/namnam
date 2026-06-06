@@ -331,6 +331,124 @@ def _css():
         background: #1ebe5d !important;
         color: #000000 !important;
     }
+
+    /* Vista cliente más compacta para celular */
+    h1 {
+        font-size: 30px !important;
+        margin-bottom: 0.2rem !important;
+    }
+
+    h2 {
+        font-size: 23px !important;
+        margin-top: 0.6rem !important;
+        margin-bottom: 0.6rem !important;
+    }
+
+    h3 {
+        font-size: 18px !important;
+        margin-top: 0.25rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    .main .block-container {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+    }
+
+    .producto-nombre {
+        color: #FFF7E6 !important;
+        font-size: 16px !important;
+        font-weight: 900 !important;
+        line-height: 1.15 !important;
+        margin-bottom: 2px !important;
+    }
+
+    .producto-info {
+        color: #FFF7E6 !important;
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        opacity: .95 !important;
+        margin-bottom: 6px !important;
+    }
+
+    .categoria-card {
+        color: #FFF7E6 !important;
+        font-size: 17px !important;
+        font-weight: 950 !important;
+        line-height: 1.15 !important;
+        margin-bottom: 2px !important;
+    }
+
+    .categoria-sub {
+        color: #FFF7E6 !important;
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        opacity: .9 !important;
+    }
+
+    .qty-num {
+        color: #FFF7E6 !important;
+        font-size: 21px !important;
+        font-weight: 1000 !important;
+        text-align: center !important;
+        padding-top: 8px !important;
+    }
+
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding-top: 0.45rem !important;
+        padding-bottom: 0.45rem !important;
+    }
+
+    @media (max-width: 650px) {
+        .main .block-container {
+            padding-top: 0.75rem !important;
+            padding-left: 0.45rem !important;
+            padding-right: 0.45rem !important;
+        }
+
+        h1 {
+            font-size: 26px !important;
+        }
+
+        h2 {
+            font-size: 20px !important;
+        }
+
+        .producto-nombre {
+            font-size: 15px !important;
+        }
+
+        .producto-info {
+            font-size: 12px !important;
+        }
+
+        .categoria-card {
+            font-size: 16px !important;
+        }
+
+        .categoria-sub {
+            font-size: 12px !important;
+        }
+
+        .stButton > button {
+            min-height: 38px !important;
+            padding: 0.35rem 0.45rem !important;
+            font-size: 14px !important;
+        }
+
+        .wa-alert-title {
+            font-size: 18px !important;
+        }
+
+        .wa-alert-text {
+            font-size: 14px !important;
+        }
+
+        .wa-alert a {
+            font-size: 18px !important;
+            padding: 14px 18px !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -413,15 +531,25 @@ def render():
                     )
 
                     with st.container(border=True):
-                        c1, c2 = st.columns([4, 1])
+                        st.markdown(
+                            f"""
+                            <div class="categoria-card">{_emoji_familia(familia)} {familia}</div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-                        c1.markdown(f"### {_emoji_familia(familia)} {familia}")
                         if cantidad_familia > 0:
-                            c1.caption(f"{cantidad_familia:g} productos agregados · {money(subtotal_familia)}")
+                            st.markdown(
+                                f"""<div class="categoria-sub">{cantidad_familia:g} productos agregados · {money(subtotal_familia)}</div>""",
+                                unsafe_allow_html=True,
+                            )
                         else:
-                            c1.caption(f"{len(productos_familia)} opciones disponibles")
+                            st.markdown(
+                                f"""<div class="categoria-sub">{len(productos_familia)} opciones disponibles</div>""",
+                                unsafe_allow_html=True,
+                            )
 
-                        if c2.button("Ver", key=f"ver_familia_{familia}"):
+                        if st.button("Ver productos", key=f"ver_familia_{familia}", use_container_width=True):
                             st.session_state["cliente_categoria_abierta"] = familia
                             st.rerun()
 
@@ -438,20 +566,24 @@ def render():
 
                 for p in familias.get(categoria_abierta, []):
                     with st.container(border=True):
-                        c1, c2, c3, c4 = st.columns([4, 1, 1, 1])
-
-                        c1.markdown(f"### {p.get('nombre')}")
-                        c1.caption(f"{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}")
+                        st.markdown(
+                            f"""
+                            <div class="producto-nombre">{p.get('nombre')}</div>
+                            <div class="producto-info">{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}</div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
                         qty = _get_qty("producto", p["id"])
+                        c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
-                        if c2.button("➖", key=f"menos_prod_{p['id']}"):
+                        if c_menos.button("➖", key=f"menos_prod_{p['id']}", use_container_width=True):
                             _change_qty("producto", p["id"], -1)
                             st.rerun()
 
-                        c3.markdown(f"### {qty:g}")
+                        c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
-                        if c4.button("➕", key=f"mas_prod_{p['id']}"):
+                        if c_mas.button("➕", key=f"mas_prod_{p['id']}", use_container_width=True):
                             _change_qty("producto", p["id"], 1)
                             st.rerun()
 
@@ -475,15 +607,18 @@ def render():
         else:
             for promo in promos:
                 with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns([4, 1, 1, 1])
-
-                    c1.markdown(f"### 🏷️ {promo.get('nombre')}")
-                    if promo.get("descripcion"):
-                        c1.caption(promo.get("descripcion"))
+                    st.markdown(
+                        f"""
+                        <div class="producto-nombre">🏷️ {promo.get('nombre')}</div>
+                        <div class="producto-info">{promo.get('descripcion') or ''}</div>
+                        <div class="producto-info"><strong>{money(promo.get('precio'))}</strong></div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                     detalles = _leer_detalle_promo(db, promo["id"])
                     if detalles:
-                        with c1.expander("Ver productos incluidos"):
+                        with st.expander("Ver productos incluidos"):
                             st.dataframe(
                                 pd.DataFrame([
                                     {
@@ -496,17 +631,16 @@ def render():
                                 hide_index=True
                             )
 
-                    c1.markdown(f"**{money(promo.get('precio'))}**")
-
                     qty = _get_qty("promo", promo["id"])
+                    c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
-                    if c2.button("➖", key=f"menos_promo_{promo['id']}"):
+                    if c_menos.button("➖", key=f"menos_promo_{promo['id']}", use_container_width=True):
                         _change_qty("promo", promo["id"], -1)
                         st.rerun()
 
-                    c3.markdown(f"### {qty:g}")
+                    c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
-                    if c4.button("➕", key=f"mas_promo_{promo['id']}"):
+                    if c_mas.button("➕", key=f"mas_promo_{promo['id']}", use_container_width=True):
                         _change_qty("promo", promo["id"], 1)
                         st.rerun()
 
@@ -580,15 +714,11 @@ def render():
             _mostrar_confirmacion_final()
             return
 
-        col_confirmar, col_limpiar = st.columns([2, 1])
+        confirmar = st.button("✅ Confirmar pedido", use_container_width=True)
 
-        with col_limpiar:
-            if st.button("Limpiar carrito"):
-                _limpiar_carrito()
-                st.rerun()
-
-        with col_confirmar:
-            confirmar = st.button("✅ Confirmar pedido", use_container_width=True)
+        if st.button("🗑️ Limpiar carrito", use_container_width=True):
+            _limpiar_carrito()
+            st.rerun()
 
         if confirmar:
             if not items:
