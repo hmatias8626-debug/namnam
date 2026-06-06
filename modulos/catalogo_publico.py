@@ -2,6 +2,7 @@ import urllib.parse
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from services.db import require_db, fetch_table, table, money
 
@@ -114,6 +115,8 @@ def _init_cart():
         st.session_state["pedido_online_confirmado"] = False
     if "pedido_online_wa_url" not in st.session_state:
         st.session_state["pedido_online_wa_url"] = ""
+    if "pedido_online_resumen" not in st.session_state:
+        st.session_state["pedido_online_resumen"] = None
 
 
 def _get_qty(tipo, item_id):
@@ -144,6 +147,7 @@ def _limpiar_carrito():
     st.session_state["cliente_promos"] = {}
     st.session_state["pedido_online_confirmado"] = False
     st.session_state["pedido_online_wa_url"] = ""
+    st.session_state["pedido_online_resumen"] = None
 
 
 def _leer_promos(db):
@@ -304,6 +308,46 @@ def _css():
     """, unsafe_allow_html=True)
 
 
+
+
+def _redirigir_whatsapp(url):
+    components.html(
+        f"""
+        <script>
+            window.open("{url}", "_self");
+        </script>
+        <p style="font-family:sans-serif;">
+            Redirigiendo a WhatsApp...
+        </p>
+        """,
+        height=80,
+    )
+
+def _mostrar_confirmacion_final():
+    resumen = st.session_state.get("pedido_online_resumen") or {}
+    wa_url = st.session_state.get("pedido_online_wa_url") or ""
+
+    st.success("✅ Pedido registrado correctamente. Te estamos llevando a WhatsApp para enviar la confirmación.")
+
+    pedido_id = resumen.get("pedido_id")
+    if pedido_id:
+        st.markdown(f"### Pedido #{pedido_id}")
+
+    st.markdown("Si WhatsApp no se abre automáticamente, tocá el botón de abajo:")
+
+    st.markdown(
+        f"""
+        <div class="whatsapp-btn">
+            <a href="{wa_url}" target="_self">
+                📲 Abrir WhatsApp
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _redirigir_whatsapp(wa_url)
+
 def render():
     _css()
     _init_cart()
@@ -312,6 +356,10 @@ def render():
 
     st.title("🍝 Ñam Ñam")
     st.caption("Pastas, pizzas, tartas y congelados")
+
+    if st.session_state.get("pedido_online_confirmado"):
+        _mostrar_confirmacion_final()
+        return
 
     try:
         productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
@@ -518,26 +566,6 @@ def render():
 
         observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
 
-        if st.session_state.get("pedido_online_confirmado"):
-            st.success("✅ Pedido registrado correctamente. Ahora envialo por WhatsApp para confirmar.")
-
-            st.markdown(
-                f"""
-                <div class="whatsapp-btn">
-                    <a href="{st.session_state.get('pedido_online_wa_url', '')}" target="_blank">
-                        📲 Enviar pedido por WhatsApp para confirmar
-                    </a>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if st.button("Hacer otro pedido"):
-                _limpiar_carrito()
-                st.rerun()
-
-            return
-
         col_confirmar, col_limpiar = st.columns([2, 1])
 
         with col_limpiar:
@@ -608,6 +636,24 @@ def render():
 
             st.session_state["pedido_online_confirmado"] = True
             st.session_state["pedido_online_wa_url"] = url
+            st.session_state["pedido_online_resumen"] = {
+                "pedido_id": pedido["id"],
+                "nombre": nombre.strip(),
+                "telefono": telefono.strip(),
+                "forma_pago": forma_pago,
+                "tipo_entrega": tipo_entrega,
+                "punto_retiro": punto_retiro,
+                "direccion": direccion.strip(),
+                "barrio": barrio.strip(),
+                "referencia": referencia.strip(),
+                "fecha": fecha_entrega.isoformat() if fecha_entrega else None,
+                "hora": hora_entrega.isoformat() if hora_entrega else None,
+                "items": items,
+                "total": total,
+            }
+
+            # Vacío el carrito interno para evitar duplicados,
+            # pero conservo el resumen confirmado en pantalla.
             st.session_state["cliente_productos"] = {}
             st.session_state["cliente_promos"] = {}
 
