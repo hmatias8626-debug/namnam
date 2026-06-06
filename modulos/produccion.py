@@ -214,24 +214,25 @@ def render():
                         "No encontré productos reales para producir en esos pedidos. "
                         "Puede ser que algún pedido viejo haya quedado guardado sin detalle."
                     )
+                    
+        if st.button("👨‍🍳 Tomar seleccionados y pasar a En Producción"):
+            lote_id = _crear_lote_id(seleccionados)
 
-               if st.button("👨‍🍳 Tomar seleccionados y pasar a En Producción"):
-    lote_id = _crear_lote_id(seleccionados)
+            for pedido_id in ids:
+                try:
+                    db.table(table("pedidos")).update({
+                        "estado": "En Producción",
+                        "produccion_lote": lote_id,
+                    }).eq("id", pedido_id).execute()
 
-    for pedido_id in ids:
-        try:
-            db.table(table("pedidos")).update({
-                "estado": "En Producción",
-                "produccion_lote": lote_id,
-            }).eq("id", pedido_id).execute()
+                except Exception as e:
+                    st.error(f"Error actualizando pedido #{pedido_id}")
+                    st.exception(e)
+                    st.stop()
 
-        except Exception as e:
-            st.error(f"Error actualizando pedido #{pedido_id}")
-            st.exception(e)
-            st.stop()
-
-    st.success(f"Lote tomado: {lote_id}")
-    st.rerun()
+            st.success(f"Lote tomado: {lote_id}")
+            st.rerun()
+               
     
     with tab2:
         st.subheader("Lotes en producción")
