@@ -22,7 +22,11 @@ from modulos.catalogo_publico import render as render_catalogo_publico
 
 apply_theme()
 
-
+# Catálogo público para clientes
+if st.query_params.get("modo") == "cliente":
+    render_catalogo_publico()
+    st.stop()
+    
 def _login_background():
     img_path = Path("assets/login_fondo.jpeg")
 
