@@ -464,10 +464,10 @@ def _mostrar_confirmacion_final():
     st.markdown(
         f"""
         <div class="wa-alert">
-            <div class="wa-alert-title">✅ Pedido #{pedido_id} registrado correctamente</div>
+            <div class="wa-alert-title">✅ Pedido #{pedido_id} registrado</div>
             <div class="wa-alert-text">
                 Total: {money(total)}<br>
-                Para confirmar el pedido, presioná WhatsApp.
+                Para confirmar, presioná WhatsApp.
             </div>
             <a href="{wa_url}" target="_blank">WHATSAPP</a>
         </div>
@@ -475,7 +475,23 @@ def _mostrar_confirmacion_final():
         unsafe_allow_html=True,
     )
 
-    if st.button("Hacer otro pedido"):
+    st.markdown("### 🧾 Resumen")
+    items_resumen = resumen.get("items") or []
+    if items_resumen:
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "Producto": i.get("producto_nombre"),
+                    "Cant.": i.get("cantidad"),
+                    "Subtotal": money(i.get("subtotal")),
+                }
+                for i in items_resumen
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    if st.button("🛒 Hacer otro pedido", use_container_width=True):
         _limpiar_carrito()
         st.rerun()
 
@@ -488,6 +504,10 @@ def render():
 
     st.title("🍝 Ñam Ñam")
     st.caption("Pastas, pizzas, tartas y congelados")
+
+    if st.session_state.get("pedido_online_confirmado"):
+        _mostrar_confirmacion_final()
+        return
 
     try:
         productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
@@ -709,10 +729,6 @@ def render():
             hora_entrega = chora.time_input("Hora")
 
         observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
-
-        if st.session_state.get("pedido_online_confirmado"):
-            _mostrar_confirmacion_final()
-            return
 
         confirmar = st.button("✅ Confirmar pedido", use_container_width=True)
 
