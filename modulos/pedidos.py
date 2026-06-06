@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
 
@@ -294,6 +296,32 @@ def _resumen_promos(db, promos, cliente, productos):
 
     return items
 
+
+
+def _registrar_pago_pendiente(db, pedido, forma_pago):
+    """
+    Registra el pago de un pedido que había quedado pendiente.
+    Actualiza el pedido y crea el ingreso en caja.
+    """
+    total = _float(pedido.get("total"))
+
+    db.table(table("pedidos")).update({
+        "pagado": True,
+        "tipo_cobro": "Cobrado",
+        "forma_pago": forma_pago,
+        "fecha_pago": datetime.now().isoformat(),
+    }).eq("id", pedido["id"]).execute()
+
+    db.table(table("caja")).insert({
+        "tipo": "Ingreso",
+        "concepto": f"Cobro pedido #{pedido['id']}",
+        "importe": total,
+        "observaciones": f"Cliente: {pedido.get('cliente_nombre') or ''}",
+        "pedido_id": pedido["id"],
+        "cliente_id": pedido.get("cliente_id"),
+        "forma_pago": forma_pago,
+        "medio": forma_pago,
+    }).execute()
 
 def render():
     header("📝 Pedidos", "Crear pedido por familias, promos, cobrar o descontar saldo mayorista")
@@ -608,6 +636,7 @@ def render():
             st.rerun()
 
     st.divider()
+    st.caption("Versión pedidos: registrar pago pendiente activo")
     st.subheader("Pedidos")
     pedidos = fetch_table("pedidos", "fecha")
 
@@ -635,19 +664,36 @@ def render():
             c4.markdown(f"### {money(p.get('total'))}")
 
             if p.get("tipo_cobro") == "Cobrado":
-                c4.success("Pagado")
+                c4.success(f"Pagado · {p.get('forma_pago') or '-'}")
             elif p.get("tipo_cobro") == "Cuenta corriente":
                 c4.warning("Descontado de saldo")
             else:
-                c4.info("Pendiente")
+                c4.info("Pendiente de cobro")
 
-            if st.button("Actualizar estado", key=f"up{p['id']}"):
-                db.table(table("pedidos")).update({
-                    "estado": nuevo_estado
-                }).eq("id", p["id"]).execute()
+            col_estado, col_pago = st.columns([1, 2])
 
-                st.success("Estado actualizado.")
-                st.rerun()
+            with col_estado:
+                if st.button("Actualizar estado", key=f"up{p['id']}"):
+                    db.table(table("pedidos")).update({
+                        "estado": nuevo_estado
+                    }).eq("id", p["id"]).execute()
+
+                    st.success("Estado actualizado.")
+                    st.rerun()
+
+            with col_pago:
+                if (p.get("tipo_cobro") or "Pendiente") == "Pendiente":
+                    st.markdown("**Registrar pago**")
+                    forma_pago_pendiente = st.selectbox(
+                        "Forma de pago",
+                        ["Efectivo", "Transferencia", "Mercado Pago"],
+                        key=f"pago_pendiente_{p['id']}"
+                    )
+
+                    if st.button("💰 Registrar pago", key=f"registrar_pago_{p['id']}"):
+                        _registrar_pago_pendiente(db, p, forma_pago_pendiente)
+                        st.success("Pago registrado y caja actualizada.")
+                        st.rerun()
 
             items_pedido = (
                 db.table(table("pedido_detalles"))
