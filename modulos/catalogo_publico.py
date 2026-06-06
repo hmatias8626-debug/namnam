@@ -183,6 +183,10 @@ def _change_qty(tipo, item_id, delta):
     _set_qty(tipo, item_id, max(0, actual + delta))
 
 
+def _remove_qty(tipo, item_id):
+    _set_qty(tipo, item_id, 0)
+
+
 def _limpiar_carrito():
     st.session_state["cliente_productos"] = {}
     st.session_state["cliente_promos"] = {}
@@ -436,6 +440,30 @@ def _css():
         padding-top: 8px !important;
     }
 
+    .carrito-card {
+        color: #FFF7E6 !important;
+        font-size: 15px !important;
+        font-weight: 900 !important;
+        line-height: 1.18 !important;
+        margin-bottom: 3px !important;
+    }
+
+    .carrito-sub {
+        color: #FFF7E6 !important;
+        font-size: 12px !important;
+        font-weight: 700 !important;
+        opacity: .95 !important;
+        margin-bottom: 6px !important;
+    }
+
+    .mini-btn-row .stButton > button {
+        min-width: 38px !important;
+        min-height: 34px !important;
+        padding: 0.25rem 0.40rem !important;
+        font-size: 13px !important;
+        border-radius: 10px !important;
+    }
+
     div[data-testid="stVerticalBlockBorderWrapper"] {
         padding-top: 0.45rem !important;
         padding-bottom: 0.45rem !important;
@@ -643,15 +671,23 @@ def render():
                         qty = _get_qty("producto", p["id"])
                         c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
-                        if c_menos.button("➖", key=f"menos_prod_{p['id']}", use_container_width=True):
-                            _change_qty("producto", p["id"], -1)
-                            st.rerun()
+                        c_menos.button(
+                            "➖",
+                            key=f"menos_prod_{p['id']}",
+                            use_container_width=True,
+                            on_click=_change_qty,
+                            args=("producto", p["id"], -1),
+                        )
 
                         c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
-                        if c_mas.button("➕", key=f"mas_prod_{p['id']}", use_container_width=True):
-                            _change_qty("producto", p["id"], 1)
-                            st.rerun()
+                        c_mas.button(
+                            "➕",
+                            key=f"mas_prod_{p['id']}",
+                            use_container_width=True,
+                            on_click=_change_qty,
+                            args=("producto", p["id"], 1),
+                        )
 
                 cantidad_categoria = sum(
                     _get_qty("producto", p["id"])
@@ -700,15 +736,23 @@ def render():
                     qty = _get_qty("promo", promo["id"])
                     c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
-                    if c_menos.button("➖", key=f"menos_promo_{promo['id']}", use_container_width=True):
-                        _change_qty("promo", promo["id"], -1)
-                        st.rerun()
+                    c_menos.button(
+                        "➖",
+                        key=f"menos_promo_{promo['id']}",
+                        use_container_width=True,
+                        on_click=_change_qty,
+                        args=("promo", promo["id"], -1),
+                    )
 
                     c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
-                    if c_mas.button("➕", key=f"mas_promo_{promo['id']}", use_container_width=True):
-                        _change_qty("promo", promo["id"], 1)
-                        st.rerun()
+                    c_mas.button(
+                        "➕",
+                        key=f"mas_promo_{promo['id']}",
+                        use_container_width=True,
+                        on_click=_change_qty,
+                        args=("promo", promo["id"], 1),
+                    )
 
     with tab_carrito:
         st.subheader("🛒 Tu pedido")
@@ -716,19 +760,52 @@ def render():
         if not items:
             st.info("Todavía no agregaste productos.")
         else:
-            st.dataframe(
-                pd.DataFrame([
-                    {
-                        "Detalle": i.get("producto_nombre"),
-                        "Cantidad": i.get("cantidad"),
-                        "Precio": money(i.get("precio_unitario")),
-                        "Subtotal": money(i.get("subtotal")),
-                    }
-                    for i in items
-                ]),
-                use_container_width=True,
-                hide_index=True
-            )
+            st.caption("Podés modificar las cantidades antes de confirmar.")
+
+            for it in items:
+                tipo_item = it.get("tipo")
+                item_id = it.get("promo_id") if tipo_item == "promo" else it.get("producto_id")
+                nombre_item = it.get("producto_nombre")
+                precio_unitario = _float(it.get("precio_unitario"))
+                cantidad_item = _float(it.get("cantidad"))
+                subtotal_item = _float(it.get("subtotal"))
+
+                with st.container(border=True):
+                    st.markdown(
+                        f"""
+                        <div class="carrito-card">{nombre_item}</div>
+                        <div class="carrito-sub">{money(precio_unitario)} c/u · Subtotal: {money(subtotal_item)}</div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
+
+                    c_menos.button(
+                        "➖",
+                        key=f"cart_menos_{tipo_item}_{item_id}",
+                        use_container_width=True,
+                        on_click=_change_qty,
+                        args=(tipo_item, item_id, -1),
+                    )
+
+                    c_qty.markdown(f"""<div class="qty-num">{cantidad_item:g}</div>""", unsafe_allow_html=True)
+
+                    c_mas.button(
+                        "➕",
+                        key=f"cart_mas_{tipo_item}_{item_id}",
+                        use_container_width=True,
+                        on_click=_change_qty,
+                        args=(tipo_item, item_id, 1),
+                    )
+
+                    c_borrar.button(
+                        "🗑️",
+                        key=f"cart_borrar_{tipo_item}_{item_id}",
+                        use_container_width=True,
+                        on_click=_remove_qty,
+                        args=(tipo_item, item_id),
+                    )
 
             st.markdown(f"## Total: {money(total)}")
 
