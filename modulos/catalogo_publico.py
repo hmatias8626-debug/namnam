@@ -340,64 +340,22 @@ def _mostrar_confirmacion_final():
     resumen = st.session_state.get("pedido_online_resumen") or {}
     wa_url = st.session_state.get("pedido_online_wa_url") or ""
 
+    pedido_id = resumen.get("pedido_id")
+    total = resumen.get("total", 0)
+
     st.markdown(
         f"""
         <div class="wa-alert">
-            <div class="wa-alert-title">✅ Pedido registrado correctamente</div>
+            <div class="wa-alert-title">✅ Pedido #{pedido_id} registrado correctamente</div>
             <div class="wa-alert-text">
-                Para confirmar el pedido, presioná el botón de WhatsApp.
+                Total: {money(total)}<br>
+                Para confirmar el pedido, presioná WhatsApp.
             </div>
             <a href="{wa_url}" target="_blank">WHATSAPP</a>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-    st.divider()
-    st.markdown("## 🧾 Resumen del pedido")
-
-    pedido_id = resumen.get("pedido_id")
-    if pedido_id:
-        st.markdown(f"### Pedido #{pedido_id}")
-
-    datos = [
-        {"Dato": "Cliente", "Valor": resumen.get("nombre", "")},
-        {"Dato": "Teléfono", "Valor": resumen.get("telefono", "")},
-        {"Dato": "Forma de pago", "Valor": resumen.get("forma_pago", "")},
-        {"Dato": "Entrega", "Valor": resumen.get("tipo_entrega", "")},
-    ]
-
-    if resumen.get("tipo_entrega") == "Retira en local":
-        datos.append({"Dato": "Retira en", "Valor": resumen.get("punto_retiro", "")})
-    else:
-        datos.append({"Dato": "Dirección", "Valor": resumen.get("direccion", "")})
-        if resumen.get("barrio"):
-            datos.append({"Dato": "Barrio", "Valor": resumen.get("barrio", "")})
-        if resumen.get("referencia"):
-            datos.append({"Dato": "Referencia", "Valor": resumen.get("referencia", "")})
-
-    datos.append({"Dato": "Fecha", "Valor": resumen.get("fecha") or "A coordinar"})
-    datos.append({"Dato": "Hora", "Valor": resumen.get("hora") or "A coordinar"})
-
-    st.dataframe(pd.DataFrame(datos), use_container_width=True, hide_index=True)
-
-    items_resumen = resumen.get("items") or []
-    if items_resumen:
-        st.markdown("### Productos")
-        st.dataframe(
-            pd.DataFrame([
-                {
-                    "Producto": i.get("producto_nombre"),
-                    "Cantidad": i.get("cantidad"),
-                    "Subtotal": money(i.get("subtotal")),
-                }
-                for i in items_resumen
-            ]),
-            use_container_width=True,
-            hide_index=True,
-        )
-
-    st.markdown(f"## Total: {money(resumen.get('total', 0))}")
 
     if st.button("Hacer otro pedido"):
         _limpiar_carrito()
@@ -412,10 +370,6 @@ def render():
 
     st.title("🍝 Ñam Ñam")
     st.caption("Pastas, pizzas, tartas y congelados")
-
-    if st.session_state.get("pedido_online_confirmado"):
-        _mostrar_confirmacion_final()
-        return
 
     try:
         productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
@@ -621,6 +575,10 @@ def render():
             hora_entrega = chora.time_input("Hora")
 
         observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
+
+        if st.session_state.get("pedido_online_confirmado"):
+            _mostrar_confirmacion_final()
+            return
 
         col_confirmar, col_limpiar = st.columns([2, 1])
 
