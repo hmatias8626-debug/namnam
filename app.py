@@ -18,15 +18,12 @@ from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
 from modulos.perfil import render as render_perfil
-from modulos.catalogo_publico import render as render_catalogo_publico
+from modulos.locales import render as render_locales
+from modulos.configuracion import render as render_configuracion
 
 apply_theme()
 
-# Catálogo público para clientes
-if st.query_params.get("modo") == "cliente":
-    render_catalogo_publico()
-    st.stop()
-    
+
 def _login_background():
     img_path = Path("assets/login_fondo.jpeg")
 
@@ -200,6 +197,8 @@ MENU = {
     "👨‍🍳 Producción": "Producción",
     "📊 Stock": "Stock",
     "💰 Caja": "Caja",
+    "🏪 Locales": "Locales",
+    "⚙️ Configuración": "Configuración",
     "🙋 Mi perfil": "Mi perfil",
 }
 
@@ -240,6 +239,12 @@ elif seccion == "Stock":
 
 elif seccion == "Caja":
     render_caja()
+
+elif seccion == "Locales":
+    render_locales()
+
+elif seccion == "Configuración":
+    render_configuracion()
 
 elif seccion == "Mi perfil":
     render_perfil()
