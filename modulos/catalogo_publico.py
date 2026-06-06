@@ -158,6 +158,8 @@ def _init_cart():
         st.session_state["pedido_online_wa_url"] = ""
     if "pedido_online_resumen" not in st.session_state:
         st.session_state["pedido_online_resumen"] = None
+    if "catalogo_seccion" not in st.session_state:
+        st.session_state["catalogo_seccion"] = "Categorías"
 
 
 def _get_qty(tipo, item_id):
@@ -185,6 +187,10 @@ def _change_qty(tipo, item_id, delta):
 
 def _remove_qty(tipo, item_id):
     _set_qty(tipo, item_id, 0)
+
+
+def _set_seccion(seccion):
+    st.session_state["catalogo_seccion"] = seccion
 
 
 def _limpiar_carrito():
@@ -456,12 +462,25 @@ def _css():
         margin-bottom: 6px !important;
     }
 
-    .mini-btn-row .stButton > button {
-        min-width: 38px !important;
+    .qty-num-small {
+        color: #FFF7E6 !important;
+        font-size: 20px !important;
+        font-weight: 1000 !important;
+        text-align: center !important;
+        padding-top: 5px !important;
+        min-width: 22px !important;
+    }
+
+    /* Botones chicos del carrito */
+    div[data-testid="column"] .stButton > button {
         min-height: 34px !important;
-        padding: 0.25rem 0.40rem !important;
-        font-size: 13px !important;
-        border-radius: 10px !important;
+        padding: 0.20rem 0.40rem !important;
+    }
+
+    /* Navegación superior más compacta */
+    div[role="radiogroup"] label {
+        font-size: 14px !important;
+        padding: 0.25rem 0.45rem !important;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -596,9 +615,30 @@ def render():
     total = sum(_float(i.get("subtotal")) for i in items)
     unidades = sum(_float(i.get("cantidad")) for i in items)
 
-    tab_productos, tab_promos, tab_carrito = st.tabs(["📂 Categorías", "🏷️ Promos", f"🛒 Carrito ({unidades:g})"])
+    opciones_nav = ["Categorías", "Promos", f"Carrito ({unidades:g})"]
+    actual_nav = st.session_state.get("catalogo_seccion", "Categorías")
 
-    with tab_productos:
+    if actual_nav.startswith("Carrito"):
+        actual_index = 2
+    elif actual_nav == "Promos":
+        actual_index = 1
+    else:
+        actual_index = 0
+
+    nav = st.radio(
+        "Sección",
+        opciones_nav,
+        index=actual_index,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    if nav.startswith("Carrito"):
+        st.session_state["catalogo_seccion"] = "Carrito"
+    else:
+        st.session_state["catalogo_seccion"] = nav
+
+    if st.session_state["catalogo_seccion"] == "Categorías":
         if not productos:
             st.info("Todavía no hay productos disponibles.")
         else:
@@ -672,9 +712,8 @@ def render():
                         c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
                         c_menos.button(
-                            "➖",
+                            "−",
                             key=f"menos_prod_{p['id']}",
-                            use_container_width=True,
                             on_click=_change_qty,
                             args=("producto", p["id"], -1),
                         )
@@ -682,9 +721,8 @@ def render():
                         c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
                         c_mas.button(
-                            "➕",
+                            "+",
                             key=f"mas_prod_{p['id']}",
-                            use_container_width=True,
                             on_click=_change_qty,
                             args=("producto", p["id"], 1),
                         )
@@ -703,7 +741,7 @@ def render():
                         f"En {categoria_abierta}: {cantidad_categoria:g} unidades · {money(subtotal_categoria)}"
                     )
 
-    with tab_promos:
+    elif st.session_state["catalogo_seccion"] == "Promos":
         if not promos:
             st.info("Todavía no hay promociones disponibles.")
         else:
@@ -737,9 +775,8 @@ def render():
                     c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
                     c_menos.button(
-                        "➖",
+                        "−",
                         key=f"menos_promo_{promo['id']}",
-                        use_container_width=True,
                         on_click=_change_qty,
                         args=("promo", promo["id"], -1),
                     )
@@ -747,14 +784,13 @@ def render():
                     c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
                     c_mas.button(
-                        "➕",
+                        "+",
                         key=f"mas_promo_{promo['id']}",
-                        use_container_width=True,
                         on_click=_change_qty,
                         args=("promo", promo["id"], 1),
                     )
 
-    with tab_carrito:
+    elif st.session_state["catalogo_seccion"] == "Carrito":
         st.subheader("🛒 Tu pedido")
 
         if not items:
@@ -779,32 +815,26 @@ def render():
                         unsafe_allow_html=True,
                     )
 
-                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
+                    c_menos, c_qty, c_mas, c_borrar, c_espacio = st.columns([0.55, 0.45, 0.55, 0.55, 3.0])
 
                     c_menos.button(
-                        "➖",
+                        "−",
                         key=f"cart_menos_{tipo_item}_{item_id}",
-                        use_container_width=True,
-                        on_click=_change_qty,
-                        args=(tipo_item, item_id, -1),
+                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _change_qty(t, i, -1)),
                     )
 
-                    c_qty.markdown(f"""<div class="qty-num">{cantidad_item:g}</div>""", unsafe_allow_html=True)
+                    c_qty.markdown(f"""<div class="qty-num-small">{cantidad_item:g}</div>""", unsafe_allow_html=True)
 
                     c_mas.button(
-                        "➕",
+                        "+",
                         key=f"cart_mas_{tipo_item}_{item_id}",
-                        use_container_width=True,
-                        on_click=_change_qty,
-                        args=(tipo_item, item_id, 1),
+                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _change_qty(t, i, 1)),
                     )
 
                     c_borrar.button(
                         "🗑️",
                         key=f"cart_borrar_{tipo_item}_{item_id}",
-                        use_container_width=True,
-                        on_click=_remove_qty,
-                        args=(tipo_item, item_id),
+                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _remove_qty(t, i)),
                     )
 
             st.markdown(f"## Total: {money(total)}")
@@ -857,6 +887,7 @@ def render():
 
         if st.button("🗑️ Limpiar carrito", use_container_width=True):
             _limpiar_carrito()
+            st.session_state["catalogo_seccion"] = "Carrito"
             st.rerun()
 
         if confirmar:
