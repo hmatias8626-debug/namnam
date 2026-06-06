@@ -311,42 +311,41 @@ def _css():
 
 
 def _redirigir_whatsapp(url):
-    components.html(
+    # Intento 1: redirección por meta refresh.
+    # Intento 2: redirección por JavaScript al top-level.
+    # En algunos navegadores puede ser bloqueado por seguridad; si pasa, queda fallback manual.
+    st.markdown(
         f"""
+        <meta http-equiv="refresh" content="0; url={url}">
         <script>
-            window.open("{url}", "_self");
+            try {{
+                window.top.location.href = "{url}";
+            }} catch (e) {{
+                window.location.href = "{url}";
+            }}
         </script>
-        <p style="font-family:sans-serif;">
-            Redirigiendo a WhatsApp...
-        </p>
         """,
-        height=80,
+        unsafe_allow_html=True,
     )
 
 def _mostrar_confirmacion_final():
-    resumen = st.session_state.get("pedido_online_resumen") or {}
     wa_url = st.session_state.get("pedido_online_wa_url") or ""
 
-    st.success("✅ Pedido registrado correctamente. Te estamos llevando a WhatsApp para enviar la confirmación.")
+    _redirigir_whatsapp(wa_url)
 
-    pedido_id = resumen.get("pedido_id")
-    if pedido_id:
-        st.markdown(f"### Pedido #{pedido_id}")
-
-    st.markdown("Si WhatsApp no se abre automáticamente, tocá el botón de abajo:")
-
+    # Fallback mínimo por si el navegador bloquea la redirección automática.
+    st.markdown("### Redirigiendo a WhatsApp...")
     st.markdown(
         f"""
         <div class="whatsapp-btn">
             <a href="{wa_url}" target="_self">
-                📲 Abrir WhatsApp
+                Abrir WhatsApp
             </a>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    _redirigir_whatsapp(wa_url)
 
 def render():
     _css()
