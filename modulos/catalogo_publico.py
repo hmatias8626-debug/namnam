@@ -314,15 +314,10 @@ def _mostrar_confirmacion_final():
 
     st.success("✅ Pedido registrado correctamente. Tocá el botón para enviarlo por WhatsApp y confirmar.")
 
-    st.markdown(
-        f"""
-        <div class="whatsapp-btn">
-            <a href="{wa_url}" target="_blank">
-                📲 Enviar pedido por WhatsApp para confirmar
-            </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.link_button(
+        "📲 ENVIAR PEDIDO POR WHATSAPP",
+        wa_url,
+        use_container_width=True,
     )
 
     st.divider()
@@ -660,7 +655,11 @@ def render():
                 total,
             )
 
-            url = f"https://wa.me/{WHATSAPP_NEGOCIO}?text={urllib.parse.quote(mensaje)}"
+            url = (
+                f"https://api.whatsapp.com/send?"
+                f"phone={WHATSAPP_NEGOCIO}"
+                f"&text={urllib.parse.quote(mensaje)}"
+            )
 
             st.session_state["pedido_online_confirmado"] = True
             st.session_state["pedido_online_wa_url"] = url
