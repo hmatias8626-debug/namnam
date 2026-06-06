@@ -18,6 +18,7 @@ from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
 from modulos.perfil import render as render_perfil
+from modulos.catalogo_publico import render as render_catalogo_publico
 
 apply_theme()
 
