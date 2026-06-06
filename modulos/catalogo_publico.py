@@ -284,24 +284,52 @@ def _css():
         color: #111111 !important;
     }
 
-    .whatsapp-btn a {
-        display: inline-block;
-        width: 100%;
-        text-align: center;
-        background: #ffffff;
-        color: #000000 !important;
-        padding: 15px 22px;
-        border-radius: 14px;
-        text-decoration: none !important;
-        font-weight: 900;
-        border: 2px solid #25D366;
-        box-shadow: 0 4px 14px rgba(0,0,0,.30);
-        font-size: 17px;
+    .wa-alert {
+        background: #ffffff !important;
+        color: #111111 !important;
+        border: 3px solid #25D366 !important;
+        border-radius: 18px !important;
+        padding: 22px !important;
+        margin: 18px 0 !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,.35) !important;
+        text-align: center !important;
     }
 
-    .whatsapp-btn a:hover {
-        background: #25D366;
-        color: #ffffff !important;
+    .wa-alert-title {
+        color: #111111 !important;
+        font-size: 22px !important;
+        font-weight: 1000 !important;
+        margin-bottom: 8px !important;
+        text-shadow: none !important;
+    }
+
+    .wa-alert-text {
+        color: #111111 !important;
+        font-size: 16px !important;
+        font-weight: 800 !important;
+        margin-bottom: 18px !important;
+        text-shadow: none !important;
+    }
+
+    .wa-alert a {
+        display: inline-block !important;
+        width: 92% !important;
+        max-width: 460px !important;
+        background: #25D366 !important;
+        color: #000000 !important;
+        padding: 17px 24px !important;
+        border-radius: 14px !important;
+        text-decoration: none !important;
+        font-size: 22px !important;
+        font-weight: 1000 !important;
+        border: 3px solid #0b7a32 !important;
+        box-shadow: 0 5px 16px rgba(0,0,0,.35) !important;
+        text-shadow: none !important;
+    }
+
+    .wa-alert a:hover {
+        background: #1ebe5d !important;
+        color: #000000 !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -312,12 +340,17 @@ def _mostrar_confirmacion_final():
     resumen = st.session_state.get("pedido_online_resumen") or {}
     wa_url = st.session_state.get("pedido_online_wa_url") or ""
 
-    st.success("✅ Pedido registrado correctamente. Tocá el botón para enviarlo por WhatsApp y confirmar.")
-
-    st.link_button(
-        "📲 ENVIAR PEDIDO POR WHATSAPP",
-        wa_url,
-        use_container_width=True,
+    st.markdown(
+        f"""
+        <div class="wa-alert">
+            <div class="wa-alert-title">✅ Pedido registrado correctamente</div>
+            <div class="wa-alert-text">
+                Para confirmar el pedido, presioná el botón de WhatsApp.
+            </div>
+            <a href="{wa_url}" target="_blank">WHATSAPP</a>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     st.divider()
