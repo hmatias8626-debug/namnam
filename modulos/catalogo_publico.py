@@ -6,9 +6,9 @@ import streamlit as st
 from services.db import require_db, fetch_table, table, money
 
 
-WHATSAPP_NEGOCIO = "5493812019770"
+WHATSAPP_NEGOCIO_DEFAULT = "5493812019770"
 
-PUNTOS_RETIRO = {
+PUNTOS_RETIRO_DEFAULT = {
     "Fábrica": {
         "direccion": "Fábrica Ñam Ñam",
         "horarios": "Consultar horarios disponibles para retiro.",
@@ -23,11 +23,53 @@ PUNTOS_RETIRO = {
     },
 }
 
-HORARIO_REPARTO = """
+HORARIO_REPARTO_DEFAULT = """
 Repartos disponibles según zona y disponibilidad.
 El horario será confirmado por WhatsApp al recibir el pedido.
 """
 
+
+
+def _get_config(db, clave, default=""):
+    try:
+        res = (
+            db.table("namnam_configuracion")
+            .select("*")
+            .eq("clave", clave)
+            .execute()
+            .data
+            or []
+        )
+        return res[0].get("valor") if res else default
+    except Exception:
+        return default
+
+
+def _leer_locales_retiro(db):
+    try:
+        locales = (
+            db.table("namnam_locales")
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+
+        if not locales:
+            return PUNTOS_RETIRO_DEFAULT
+
+        return {
+            l.get("nombre"): {
+                "direccion": l.get("direccion") or "",
+                "horarios": l.get("horarios") or "",
+            }
+            for l in locales
+            if l.get("nombre")
+        }
+    except Exception:
+        return PUNTOS_RETIRO_DEFAULT
 
 def _float(v):
     try:
@@ -502,6 +544,10 @@ def render():
 
     db = require_db()
 
+    whatsapp_negocio = _get_config(db, "whatsapp_pedidos", WHATSAPP_NEGOCIO_DEFAULT)
+    horario_reparto = _get_config(db, "horario_reparto", HORARIO_REPARTO_DEFAULT)
+    puntos_retiro = _leer_locales_retiro(db)
+
     st.title("🍝 Ñam Ñam")
     st.caption("Pastas, pizzas, tartas y congelados")
 
@@ -709,11 +755,11 @@ def render():
         referencia = ""
 
         if tipo_entrega == "Retira en local":
-            punto_retiro = st.selectbox("¿Dónde querés retirar?", list(PUNTOS_RETIRO.keys()))
-            info = PUNTOS_RETIRO[punto_retiro]
+            punto_retiro = st.selectbox("¿Dónde querés retirar?", list(puntos_retiro.keys()))
+            info = puntos_retiro[punto_retiro]
             st.info(f"📍 {info['direccion']}\n\n🕒 {info['horarios']}")
         else:
-            st.info(HORARIO_REPARTO)
+            st.info(horario_reparto)
             direccion = st.text_input("Dirección *")
             barrio = st.text_input("Barrio")
             referencia = st.text_input("Referencia", placeholder="Ej: portón negro, casa verde, tocar timbre")
@@ -794,7 +840,7 @@ def render():
 
             url = (
                 f"https://api.whatsapp.com/send?"
-                f"phone={WHATSAPP_NEGOCIO}"
+                f"phone={whatsapp_negocio}"
                 f"&text={urllib.parse.quote(mensaje)}"
             )
 
