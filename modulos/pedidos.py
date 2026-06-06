@@ -228,13 +228,57 @@ def _resumen_items(familias_ordenadas, familias, cliente):
     return items, resumen
 
 
-def _resumen_promos(promos):
+
+def _productos_por_id(productos):
+    return {p.get("id"): p for p in productos}
+
+
+def _precio_promo_para_cliente(db, promo, cliente, productos_por_id):
+    """
+    Minorista:
+        usa el precio fijo cargado en la promo.
+
+    Mayorista:
+        calcula el precio según los productos incluidos,
+        usando precio_mayorista de cada producto.
+    """
+    if (cliente or {}).get("tipo_cliente") != "Mayorista":
+        return _float(promo.get("precio"))
+
+    detalles = (
+        db.table("namnam_promos_detalle")
+        .select("*")
+        .eq("promo_id", promo["id"])
+        .execute()
+        .data
+        or []
+    )
+
+    total = 0.0
+
+    for d in detalles:
+        producto = productos_por_id.get(d.get("producto_id"))
+
+        if not producto:
+            continue
+
+        precio_mayorista = _float(
+            producto.get("precio_mayorista")
+            or producto.get("precio_venta")
+        )
+
+        total += _float(d.get("cantidad")) * precio_mayorista
+
+    return total
+
+def _resumen_promos(db, promos, cliente, productos):
     _init_pedido_cantidades()
+    productos_por_id = _productos_por_id(productos)
     items = []
 
     for promo in promos:
         cant = _get_promo_cantidad(promo["id"])
-        precio = _float(promo.get("precio"))
+        precio = _precio_promo_para_cliente(db, promo, cliente, productos_por_id)
         subtotal = cant * precio
 
         if cant > 0:
@@ -407,8 +451,15 @@ def render():
                     if promo.get("descripcion"):
                         c1.caption(promo.get("descripcion"))
 
-                    c2.markdown("Precio promo")
-                    c2.markdown(f"## {money(promo.get('precio'))}")
+                    productos_por_id = _productos_por_id(productos)
+                    precio_promo_cliente = _precio_promo_para_cliente(db, promo, cliente, productos_por_id)
+
+                    if tipo_cliente == "Mayorista":
+                        c2.markdown("Precio mayorista")
+                    else:
+                        c2.markdown("Precio promo")
+
+                    c2.markdown(f"## {money(precio_promo_cliente)}")
 
                     cant = c3.number_input(
                         "Cant.",
@@ -420,7 +471,7 @@ def render():
                     )
 
                     if cant > 0:
-                        c3.success(f"Subtotal: {money(_float(cant) * _float(promo.get('precio')))}")
+                        c3.success(f"Subtotal: {money(_float(cant) * precio_promo_cliente)}")
 
                     detalles = (
                         db.table("namnam_promos_detalle")
@@ -445,7 +496,7 @@ def render():
                                 hide_index=True
                             )
 
-    items_promos = _resumen_promos(promos)
+    items_promos = _resumen_promos(db, promos, cliente, productos)
     items = items_productos + items_promos
     total = sum(i["subtotal"] for i in items)
 
