@@ -110,6 +110,10 @@ def _init_cart():
         st.session_state["cliente_productos"] = {}
     if "cliente_promos" not in st.session_state:
         st.session_state["cliente_promos"] = {}
+    if "pedido_online_confirmado" not in st.session_state:
+        st.session_state["pedido_online_confirmado"] = False
+    if "pedido_online_wa_url" not in st.session_state:
+        st.session_state["pedido_online_wa_url"] = ""
 
 
 def _get_qty(tipo, item_id):
@@ -138,6 +142,8 @@ def _change_qty(tipo, item_id, delta):
 def _limpiar_carrito():
     st.session_state["cliente_productos"] = {}
     st.session_state["cliente_promos"] = {}
+    st.session_state["pedido_online_confirmado"] = False
+    st.session_state["pedido_online_wa_url"] = ""
 
 
 def _leer_promos(db):
@@ -273,6 +279,26 @@ def _css():
 
     div[data-baseweb="select"] span {
         color: #111111 !important;
+    }
+
+    .whatsapp-btn a {
+        display: inline-block;
+        width: 100%;
+        text-align: center;
+        background: #ffffff;
+        color: #000000 !important;
+        padding: 15px 22px;
+        border-radius: 14px;
+        text-decoration: none !important;
+        font-weight: 900;
+        border: 2px solid #25D366;
+        box-shadow: 0 4px 14px rgba(0,0,0,.30);
+        font-size: 17px;
+    }
+
+    .whatsapp-btn a:hover {
+        background: #25D366;
+        color: #ffffff !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -456,6 +482,26 @@ def render():
 
         observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
 
+        if st.session_state.get("pedido_online_confirmado"):
+            st.success("✅ Pedido registrado correctamente. Ahora envialo por WhatsApp para confirmar.")
+
+            st.markdown(
+                f"""
+                <div class="whatsapp-btn">
+                    <a href="{st.session_state.get('pedido_online_wa_url', '')}" target="_blank">
+                        📲 Enviar pedido por WhatsApp para confirmar
+                    </a>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            if st.button("Hacer otro pedido"):
+                _limpiar_carrito()
+                st.rerun()
+
+            return
+
         col_confirmar, col_limpiar = st.columns([2, 1])
 
         with col_limpiar:
@@ -522,8 +568,11 @@ def render():
                 total,
             )
 
-            _limpiar_carrito()
-
-            st.success(f"Pedido #{pedido['id']} creado correctamente.")
             url = f"https://wa.me/{WHATSAPP_NEGOCIO}?text={urllib.parse.quote(mensaje)}"
-            st.link_button("📲 Enviar pedido por WhatsApp", url)
+
+            st.session_state["pedido_online_confirmado"] = True
+            st.session_state["pedido_online_wa_url"] = url
+            st.session_state["cliente_productos"] = {}
+            st.session_state["cliente_promos"] = {}
+
+            st.rerun()
