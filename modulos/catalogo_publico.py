@@ -326,7 +326,7 @@ def render():
     total = sum(_float(i.get("subtotal")) for i in items)
     unidades = sum(_float(i.get("cantidad")) for i in items)
 
-    tab_productos, tab_promos, tab_carrito = st.tabs(["📦 Productos", "🏷️ Promos", f"🛒 Carrito ({unidades:g})"])
+    tab_productos, tab_promos, tab_carrito = st.tabs(["📂 Categorías", "🏷️ Promos", f"🛒 Carrito ({unidades:g})"])
 
     with tab_productos:
         if not productos:
@@ -338,42 +338,78 @@ def render():
 
             familias_ordenadas = _ordenar_familias(familias)
 
-            if "cliente_familia" not in st.session_state:
-                st.session_state["cliente_familia"] = familias_ordenadas[0]
+            if "cliente_categoria_abierta" not in st.session_state:
+                st.session_state["cliente_categoria_abierta"] = None
 
-            if st.session_state["cliente_familia"] not in familias_ordenadas:
-                st.session_state["cliente_familia"] = familias_ordenadas[0]
+            categoria_abierta = st.session_state.get("cliente_categoria_abierta")
 
-            labels = [f"{_emoji_familia(f)} {f}" for f in familias_ordenadas]
-            label_to_family = {f"{_emoji_familia(f)} {f}": f for f in familias_ordenadas}
+            if categoria_abierta is None:
+                st.markdown("## ¿Qué querés pedir?")
 
-            actual = st.session_state["cliente_familia"]
-            actual_label = f"{_emoji_familia(actual)} {actual}"
-            idx = labels.index(actual_label) if actual_label in labels else 0
+                for familia in familias_ordenadas:
+                    productos_familia = familias[familia]
+                    cantidad_familia = sum(_get_qty("producto", p["id"]) for p in productos_familia)
+                    subtotal_familia = sum(
+                        _get_qty("producto", p["id"]) * _float(p.get("precio_venta"))
+                        for p in productos_familia
+                    )
 
-            selected = st.radio("Categoría", labels, index=idx, horizontal=True)
-            familia = label_to_family[selected]
-            st.session_state["cliente_familia"] = familia
+                    with st.container(border=True):
+                        c1, c2 = st.columns([4, 1])
 
-            st.markdown(f"## {_emoji_familia(familia)} {familia}")
+                        c1.markdown(f"### {_emoji_familia(familia)} {familia}")
+                        if cantidad_familia > 0:
+                            c1.caption(f"{cantidad_familia:g} productos agregados · {money(subtotal_familia)}")
+                        else:
+                            c1.caption(f"{len(productos_familia)} opciones disponibles")
 
-            for p in familias[familia]:
-                with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns([4, 1, 1, 1])
+                        if c2.button("Ver", key=f"ver_familia_{familia}"):
+                            st.session_state["cliente_categoria_abierta"] = familia
+                            st.rerun()
 
-                    c1.markdown(f"### {p.get('nombre')}")
-                    c1.caption(f"{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}")
+                st.info("Entrá a una categoría para ver sus productos.")
 
-                    qty = _get_qty("producto", p["id"])
-                    if c2.button("➖", key=f"menos_prod_{p['id']}"):
-                        _change_qty("producto", p["id"], -1)
-                        st.rerun()
+            else:
+                st.markdown(f"## {_emoji_familia(categoria_abierta)} {categoria_abierta}")
 
-                    c3.markdown(f"### {qty:g}")
+                if st.button("⬅️ Volver a categorías"):
+                    st.session_state["cliente_categoria_abierta"] = None
+                    st.rerun()
 
-                    if c4.button("➕", key=f"mas_prod_{p['id']}"):
-                        _change_qty("producto", p["id"], 1)
-                        st.rerun()
+                st.divider()
+
+                for p in familias.get(categoria_abierta, []):
+                    with st.container(border=True):
+                        c1, c2, c3, c4 = st.columns([4, 1, 1, 1])
+
+                        c1.markdown(f"### {p.get('nombre')}")
+                        c1.caption(f"{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}")
+
+                        qty = _get_qty("producto", p["id"])
+
+                        if c2.button("➖", key=f"menos_prod_{p['id']}"):
+                            _change_qty("producto", p["id"], -1)
+                            st.rerun()
+
+                        c3.markdown(f"### {qty:g}")
+
+                        if c4.button("➕", key=f"mas_prod_{p['id']}"):
+                            _change_qty("producto", p["id"], 1)
+                            st.rerun()
+
+                cantidad_categoria = sum(
+                    _get_qty("producto", p["id"])
+                    for p in familias.get(categoria_abierta, [])
+                )
+                subtotal_categoria = sum(
+                    _get_qty("producto", p["id"]) * _float(p.get("precio_venta"))
+                    for p in familias.get(categoria_abierta, [])
+                )
+
+                if cantidad_categoria > 0:
+                    st.success(
+                        f"En {categoria_abierta}: {cantidad_categoria:g} unidades · {money(subtotal_categoria)}"
+                    )
 
     with tab_promos:
         if not promos:
