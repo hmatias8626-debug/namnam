@@ -666,6 +666,63 @@ def _css():
             min-width: 0 !important;
         }
     }
+
+    /* FIX definitivo: controles siempre en fila horizontal en celular */
+    @media (max-width: 650px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.25rem !important;
+            align-items: center !important;
+        }
+
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+        }
+
+        div[data-testid="stNumberInput"] {
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+        }
+
+        input[type="number"] {
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+            height: 31px !important;
+            min-height: 31px !important;
+            text-align: center !important;
+            padding: 0 !important;
+            font-size: 13px !important;
+        }
+
+        div[data-testid="column"] .stButton > button {
+            width: 32px !important;
+            min-width: 32px !important;
+            max-width: 32px !important;
+            height: 31px !important;
+            min-height: 31px !important;
+            padding: 0 !important;
+            font-size: 13px !important;
+            border-radius: 9px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        .item-name {
+            font-size: 13px !important;
+            line-height: 1.08 !important;
+        }
+
+        .item-sub {
+            font-size: 10px !important;
+            line-height: 1.05 !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -818,7 +875,7 @@ def render():
             else:
                 st.markdown(f"## {_emoji_familia(categoria_abierta)} {categoria_abierta}")
 
-                if st.button("⬅️ Volver a categorías"):
+                if st.button("⬅️ Volver"):
                     st.session_state["cliente_categoria_abierta"] = None
                     st.rerun()
 
@@ -837,7 +894,7 @@ def render():
                         )
 
                         st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                        c_menos, c_qty, c_mas, c_borrar, c_espacio = st.columns([0.42, 0.72, 0.42, 0.46, 3.2])
+                        c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
 
                         c_menos.button(
                             "−",
@@ -904,7 +961,7 @@ def render():
                     )
 
                     st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                    c_menos, c_qty, c_mas, c_borrar, c_espacio = st.columns([0.42, 0.72, 0.42, 0.46, 3.2])
+                    c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
 
                     c_menos.button(
                         "−",
@@ -981,7 +1038,7 @@ def render():
                     )
 
                     st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                    c_menos, c_qty, c_mas, c_borrar, c_espacio = st.columns([0.42, 0.72, 0.42, 0.46, 3.2])
+                    c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
 
                     c_menos.button(
                         "−",
