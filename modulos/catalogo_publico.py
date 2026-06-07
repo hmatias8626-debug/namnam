@@ -587,6 +587,74 @@ def _css():
             padding: 14px 18px !important;
         }
     }
+
+    /* Mantener controles en fila también en celular */
+    @media (max-width: 650px) {
+        div[data-testid="stHorizontalBlock"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.28rem !important;
+            align-items: center !important;
+        }
+
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+            flex: 0 0 auto !important;
+            min-width: 0 !important;
+            width: auto !important;
+        }
+
+        /* Primera columna: nombre del producto */
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+        }
+
+        .producto-linea-nombre,
+        .carrito-card {
+            font-size: 13px !important;
+            line-height: 1.1 !important;
+            white-space: normal !important;
+            word-break: normal !important;
+        }
+
+        .producto-linea-info,
+        .carrito-sub {
+            font-size: 10px !important;
+            line-height: 1.05 !important;
+        }
+
+        div[data-testid="stNumberInput"] {
+            max-width: 48px !important;
+            min-width: 48px !important;
+            width: 48px !important;
+        }
+
+        input[type="number"] {
+            width: 48px !important;
+            min-width: 48px !important;
+            max-width: 48px !important;
+            height: 32px !important;
+            min-height: 32px !important;
+            font-size: 13px !important;
+        }
+
+        div[data-testid="column"] .stButton > button {
+            min-width: 31px !important;
+            width: 31px !important;
+            max-width: 31px !important;
+            min-height: 32px !important;
+            height: 32px !important;
+            padding: 0 !important;
+            font-size: 13px !important;
+            border-radius: 9px !important;
+        }
+
+        /* Botón VER más chico */
+        div[data-testid="column"] .stButton > button:has(p) {
+            white-space: nowrap !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -739,7 +807,7 @@ def render():
             else:
                 st.markdown(f"## {_emoji_familia(categoria_abierta)} {categoria_abierta}")
 
-                if st.button("⬅️ Volver a categorías"):
+                if st.button("⬅️ Volver"):
                     st.session_state["cliente_categoria_abierta"] = None
                     st.rerun()
 
@@ -749,7 +817,7 @@ def render():
                     with st.container(border=True):
                         qty = int(_get_qty("producto", p["id"]))
 
-                        c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+                        c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([3.7, 0.36, 0.50, 0.36, 0.40])
 
                         c_info.markdown(
                             f"""
@@ -814,7 +882,7 @@ def render():
                 with st.container(border=True):
                     qty = int(_get_qty("promo", promo["id"]))
 
-                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([3.7, 0.36, 0.50, 0.36, 0.40])
 
                     c_info.markdown(
                         f"""
@@ -889,7 +957,7 @@ def render():
                 subtotal_item = _float(it.get("subtotal"))
 
                 with st.container(border=True):
-                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([3.7, 0.36, 0.50, 0.36, 0.40])
 
                     c_info.markdown(
                         f"""
