@@ -667,60 +667,69 @@ def _css():
         }
     }
 
-    /* FIX definitivo: controles siempre en fila horizontal en celular */
+    /* Controles compactos del catálogo */
+    .item-name {
+        color: #FFF7E6 !important;
+        font-size: 14px !important;
+        font-weight: 950 !important;
+        line-height: 1.10 !important;
+        padding-top: 5px !important;
+    }
+
+    .item-sub {
+        color: #FFF7E6 !important;
+        font-size: 11px !important;
+        font-weight: 750 !important;
+        opacity: .95 !important;
+        line-height: 1.05 !important;
+        margin-bottom: 4px !important;
+    }
+
+    div[data-testid="stNumberInput"] {
+        max-width: 56px !important;
+        min-width: 56px !important;
+        width: 56px !important;
+    }
+
+    div[data-testid="stNumberInput"] button {
+        display: none !important;
+    }
+
+    input[type="number"] {
+        width: 56px !important;
+        min-width: 56px !important;
+        max-width: 56px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        font-size: 13px !important;
+        font-weight: 950 !important;
+        text-align: center !important;
+        padding: 0 !important;
+        border-radius: 9px !important;
+    }
+
+    div[data-testid="column"] .stButton > button {
+        min-width: 34px !important;
+        width: 34px !important;
+        max-width: 34px !important;
+        min-height: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        font-size: 13px !important;
+        border-radius: 9px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #111111 !important;
+    }
+
     @media (max-width: 650px) {
-        div[data-testid="stHorizontalBlock"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 0.25rem !important;
-            align-items: center !important;
-        }
-
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
-            flex: 0 0 auto !important;
-            width: auto !important;
-            min-width: 0 !important;
-        }
-
-        div[data-testid="stNumberInput"] {
-            width: 54px !important;
-            min-width: 54px !important;
-            max-width: 54px !important;
-        }
-
-        input[type="number"] {
-            width: 54px !important;
-            min-width: 54px !important;
-            max-width: 54px !important;
-            height: 31px !important;
-            min-height: 31px !important;
-            text-align: center !important;
-            padding: 0 !important;
-            font-size: 13px !important;
-        }
-
-        div[data-testid="column"] .stButton > button {
-            width: 32px !important;
-            min-width: 32px !important;
-            max-width: 32px !important;
-            height: 31px !important;
-            min-height: 31px !important;
-            padding: 0 !important;
-            font-size: 13px !important;
-            border-radius: 9px !important;
-            display: inline-flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-        }
-
         .item-name {
             font-size: 13px !important;
-            line-height: 1.08 !important;
         }
 
         .item-sub {
             font-size: 10px !important;
-            line-height: 1.05 !important;
         }
     }
     </style>
@@ -857,7 +866,7 @@ def render():
                         else:
                             sub_txt = f"{len(productos_familia)} opciones"
 
-                        c_info.markdown(
+                        st.markdown(
                             f"""
                             <div class="cat-line-name">{_emoji_familia(familia)} {familia}</div>
                             <div class="cat-line-sub">{sub_txt}</div>
@@ -875,7 +884,7 @@ def render():
             else:
                 st.markdown(f"## {_emoji_familia(categoria_abierta)} {categoria_abierta}")
 
-                if st.button("⬅️ Volver"):
+                if st.button("⬅️ Volver a categorías"):
                     st.session_state["cliente_categoria_abierta"] = None
                     st.rerun()
 
@@ -894,7 +903,7 @@ def render():
                         )
 
                         st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                        c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
+                        c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                         c_menos.button(
                             "−",
@@ -961,7 +970,7 @@ def render():
                     )
 
                     st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                    c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
+                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                     c_menos.button(
                         "−",
@@ -1038,7 +1047,7 @@ def render():
                     )
 
                     st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
-                    c_menos, c_qty, c_mas, c_borrar = st.columns([0.42, 0.72, 0.42, 0.46])
+                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                     c_menos.button(
                         "−",
