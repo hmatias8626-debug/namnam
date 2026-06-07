@@ -506,13 +506,29 @@ def _css():
         }
     }
 
-    /* ===== FIX Ñam Ñam: categorías y controles compactos ===== */
+    /* ===== Ñam Ñam ordenado FINAL ===== */
+
+    .cat-name {
+        color: #FFF7E6 !important;
+        font-size: 14px !important;
+        font-weight: 950 !important;
+        line-height: 1.1 !important;
+        padding-top: 4px !important;
+    }
+
+    .cat-sub {
+        color: #FFF7E6 !important;
+        font-size: 10px !important;
+        font-weight: 750 !important;
+        opacity: .9 !important;
+        line-height: 1.05 !important;
+    }
 
     .item-name {
         color: #FFF7E6 !important;
         font-size: 14px !important;
         font-weight: 950 !important;
-        line-height: 1.12 !important;
+        line-height: 1.1 !important;
         margin-bottom: 1px !important;
     }
 
@@ -520,28 +536,15 @@ def _css():
         color: #FFF7E6 !important;
         font-size: 11px !important;
         font-weight: 750 !important;
-        line-height: 1.05 !important;
         opacity: .95 !important;
-        margin-bottom: 6px !important;
-    }
-
-    .cat-sub {
-        color: #FFF7E6 !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        opacity: .9 !important;
-        margin-top: -4px !important;
-        margin-bottom: 0 !important;
-    }
-
-    .control-area {
-        max-width: 210px !important;
+        line-height: 1.05 !important;
+        margin-bottom: 5px !important;
     }
 
     div[data-testid="stNumberInput"] {
-        width: 56px !important;
-        min-width: 56px !important;
-        max-width: 56px !important;
+        width: 54px !important;
+        min-width: 54px !important;
+        max-width: 54px !important;
     }
 
     div[data-testid="stNumberInput"] button {
@@ -549,11 +552,11 @@ def _css():
     }
 
     input[type="number"] {
-        width: 56px !important;
-        min-width: 56px !important;
-        max-width: 56px !important;
-        height: 32px !important;
-        min-height: 32px !important;
+        width: 54px !important;
+        min-width: 54px !important;
+        max-width: 54px !important;
+        height: 31px !important;
+        min-height: 31px !important;
         font-size: 13px !important;
         font-weight: 950 !important;
         text-align: center !important;
@@ -565,8 +568,8 @@ def _css():
         min-width: 34px !important;
         width: 34px !important;
         max-width: 34px !important;
-        min-height: 32px !important;
-        height: 32px !important;
+        min-height: 31px !important;
+        height: 31px !important;
         padding: 0 !important;
         font-size: 13px !important;
         border-radius: 9px !important;
@@ -576,18 +579,52 @@ def _css():
         color: #111111 !important;
     }
 
-    /* Botones de categorías: texto tipo "SORRENTINOS  VER", bajo y compacto */
-    .categoria-boton .stButton > button {
-        width: 100% !important;
-        max-width: 100% !important;
-        height: 34px !important;
-        min-height: 34px !important;
+    /* Fila de controles: - cantidad + tachito, compacta */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
+        width: 190px !important;
+        max-width: 190px !important;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+        align-items: center !important;
         justify-content: flex-start !important;
-        padding-left: 12px !important;
-        padding-right: 12px !important;
-        font-size: 13px !important;
-        font-weight: 950 !important;
-        border-radius: 12px !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) > div[data-testid="column"] {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: 0 !important;
+    }
+
+    /* Categorías: nombre a la izquierda, botón VER chico a la derecha */
+    .cat-row div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    .cat-row div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+    }
+
+    .cat-row div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
+        flex: 0 0 52px !important;
+        width: 52px !important;
+        min-width: 52px !important;
+    }
+
+    .cat-row div[data-testid="column"] .stButton > button {
+        width: 52px !important;
+        min-width: 52px !important;
+        max-width: 52px !important;
+        height: 31px !important;
+        min-height: 31px !important;
+        font-size: 11px !important;
+        border-radius: 9px !important;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -596,35 +633,17 @@ def _css():
     }
 
     @media (max-width: 650px) {
-        .item-name {
-            font-size: 13px !important;
-        }
-
-        .item-sub,
-        .cat-sub {
-            font-size: 10px !important;
-        }
-
         .main .block-container {
             padding-left: 0.45rem !important;
             padding-right: 0.45rem !important;
         }
 
-        /* SOLO filas con 4 columnas, que son controles - cantidad + basura */
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(4)):not(:has(> div[data-testid="column"]:nth-child(5))) {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 0.25rem !important;
-            align-items: center !important;
-            justify-content: flex-start !important;
-            width: 210px !important;
-            max-width: 210px !important;
+        .item-name {
+            font-size: 13px !important;
         }
 
-        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(4)):not(:has(> div[data-testid="column"]:nth-child(5))) > div[data-testid="column"] {
-            flex: 0 0 auto !important;
-            width: auto !important;
-            min-width: 0 !important;
+        .item-sub {
+            font-size: 10px !important;
         }
     }
     </style>
@@ -759,14 +778,23 @@ def render():
                         else:
                             sub_txt = f"{len(productos_familia)} opciones"
 
-                        st.markdown('<div class="categoria-boton">', unsafe_allow_html=True)
-                        if st.button(f"{_emoji_familia(familia)} {familia}    VER", key=f"ver_familia_{familia}", use_container_width=True):
+                        st.markdown('<div class="cat-row">', unsafe_allow_html=True)
+                        c_info, c_ver = st.columns([5, 1])
+
+                        c_info.markdown(
+                            f"""
+                            <div class="cat-name">{_emoji_familia(familia)} {familia}</div>
+                            <div class="cat-sub">{sub_txt}</div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        if c_ver.button("VER", key=f"ver_familia_{familia}"):
                             st.session_state["cliente_categoria_abierta"] = familia
                             st.session_state["catalogo_seccion"] = "Categorías"
                             st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
 
-                        st.markdown(f"""<div class="cat-sub">{sub_txt}</div>""", unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
 
                 st.info("Entrá a una categoría para ver sus productos.")
 
@@ -793,12 +821,7 @@ def render():
 
                         c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
-                        c_menos.button(
-                            "−",
-                            key=f"menos_prod_{p['id']}",
-                            on_click=_change_qty,
-                            args=("producto", p["id"], -1),
-                        )
+                        c_menos.button("−", key=f"menos_prod_{p['id']}", on_click=_change_qty, args=("producto", p["id"], -1))
 
                         key_qty = f"qty_prod_{p['id']}"
                         c_qty.number_input(
@@ -812,19 +835,9 @@ def render():
                             args=("producto", p["id"], key_qty),
                         )
 
-                        c_mas.button(
-                            "➕",
-                            key=f"mas_prod_{p['id']}",
-                            on_click=_change_qty,
-                            args=("producto", p["id"], 1),
-                        )
+                        c_mas.button("➕", key=f"mas_prod_{p['id']}", on_click=_change_qty, args=("producto", p["id"], 1))
 
-                        c_borrar.button(
-                            "🗑️",
-                            key=f"borrar_prod_{p['id']}",
-                            on_click=_remove_qty,
-                            args=("producto", p["id"]),
-                        )
+                        c_borrar.button("🗑️", key=f"borrar_prod_{p['id']}", on_click=_remove_qty, args=("producto", p["id"]))
 
                 cantidad_categoria = sum(
                     _get_qty("producto", p["id"])
@@ -858,12 +871,7 @@ def render():
 
                     c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
-                    c_menos.button(
-                        "−",
-                        key=f"menos_promo_{promo['id']}",
-                        on_click=_change_qty,
-                        args=("promo", promo["id"], -1),
-                    )
+                    c_menos.button("−", key=f"menos_promo_{promo['id']}", on_click=_change_qty, args=("promo", promo["id"], -1))
 
                     key_qty = f"qty_promo_{promo['id']}"
                     c_qty.number_input(
@@ -877,19 +885,9 @@ def render():
                         args=("promo", promo["id"], key_qty),
                     )
 
-                    c_mas.button(
-                        "➕",
-                        key=f"mas_promo_{promo['id']}",
-                        on_click=_change_qty,
-                        args=("promo", promo["id"], 1),
-                    )
+                    c_mas.button("➕", key=f"mas_promo_{promo['id']}", on_click=_change_qty, args=("promo", promo["id"], 1))
 
-                    c_borrar.button(
-                        "🗑️",
-                        key=f"borrar_promo_{promo['id']}",
-                        on_click=_remove_qty,
-                        args=("promo", promo["id"]),
-                    )
+                    c_borrar.button("🗑️", key=f"borrar_promo_{promo['id']}", on_click=_remove_qty, args=("promo", promo["id"]))
 
                     detalles = _leer_detalle_promo(db, promo["id"])
                     if detalles:
