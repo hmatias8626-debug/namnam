@@ -45,6 +45,20 @@ def _get_config(db, clave, default=""):
         return default
 
 
+def _config_bool(db, clave, default=True):
+    valor = str(_get_config(db, clave, "1" if default else "0")).strip().lower()
+    return valor in ["1", "true", "si", "sí", "yes", "on"]
+
+
+def _config_float(db, clave, default=0):
+    valor = str(_get_config(db, clave, str(default))).strip()
+    valor = valor.replace("$", "").replace(" ", "").replace(".", "").replace(",", ".")
+    try:
+        return float(valor or 0)
+    except Exception:
+        return float(default or 0)
+
+
 def _leer_locales_retiro(db):
     try:
         locales = (
@@ -270,7 +284,24 @@ def _armar_items(productos, promos):
     return items
 
 
-def _mensaje_whatsapp(pedido_id, nombre, telefono, tipo_entrega, punto_retiro, direccion, barrio, referencia, fecha, hora, forma_pago, items, total):
+def _mensaje_whatsapp(
+    pedido_id,
+    nombre,
+    telefono,
+    tipo_entrega,
+    punto_retiro,
+    direccion,
+    barrio,
+    referencia,
+    fecha,
+    hora,
+    forma_pago,
+    items,
+    subtotal_productos,
+    costo_envio,
+    total,
+    horario_opcion,
+):
     lineas = [
         f"🍝 Nuevo pedido Ñam Ñam #{pedido_id}",
         "",
@@ -290,20 +321,27 @@ def _mensaje_whatsapp(pedido_id, nombre, telefono, tipo_entrega, punto_retiro, d
         if referencia:
             lineas.append(f"Referencia: {referencia}")
 
-    lineas += [
-        f"Fecha: {fecha or 'A coordinar'}",
-        f"Hora: {hora or 'A coordinar'}",
-        "",
-        "Pedido:",
-    ]
+    if horario_opcion == "Lo antes posible":
+        lineas.append("Horario solicitado: Lo antes posible")
+    else:
+        lineas.append("Horario solicitado: Programado")
+        lineas.append(f"Fecha: {fecha or 'A coordinar'}")
+        lineas.append(f"Hora: {hora or 'A coordinar'}")
+
+    lineas += ["", "Pedido:"]
 
     for it in items:
         lineas.append(f"- {it['cantidad']:g} x {it['producto_nombre']} = {money(it['subtotal'])}")
 
-    lineas += ["", f"Total: {money(total)}"]
+    lineas += ["", f"Subtotal productos: {money(subtotal_productos)}"]
 
+    if tipo_entrega == "Envío a domicilio":
+        lineas.append(f"Envío: {'Sin cargo' if costo_envio == 0 else money(costo_envio)}")
+    else:
+        lineas.append("Envío: $0")
+
+    lineas.append(f"Total: {money(total)}")
     return "\n".join(lineas)
-
 
 def _css():
     st.markdown("""
@@ -739,12 +777,18 @@ def _mostrar_confirmacion_final():
 
     pedido_id = resumen.get("pedido_id")
     total = resumen.get("total", 0)
+    costo_envio = _float(resumen.get("costo_envio", 0))
+
+    envio_txt = ""
+    if resumen.get("tipo_entrega") == "Envío a domicilio":
+        envio_txt = f"Envío: {'Sin cargo' if costo_envio == 0 else money(costo_envio)}<br>"
 
     st.markdown(
         f"""
         <div class="wa-alert">
             <div class="wa-alert-title">✅ Pedido #{pedido_id} registrado</div>
             <div class="wa-alert-text">
+                {envio_txt}
                 Total: {money(total)}<br>
                 Para confirmar, presioná WhatsApp.
             </div>
@@ -783,6 +827,11 @@ def render():
 
     whatsapp_negocio = _get_config(db, "whatsapp_pedidos", WHATSAPP_NEGOCIO_DEFAULT)
     horario_reparto = _get_config(db, "horario_reparto", HORARIO_REPARTO_DEFAULT)
+    texto_aclaratorio_entrega = _get_config(db, "texto_aclaratorio_entrega", "Los horarios son orientativos y se confirman por WhatsApp.")
+    permitir_envio = _config_bool(db, "permitir_envio", True)
+    permitir_retiro = _config_bool(db, "permitir_retiro", True)
+    costo_envio_config = _config_float(db, "costo_envio", 0)
+    envio_gratis_desde = _config_float(db, "envio_gratis_desde", 0)
     puntos_retiro = _leer_locales_retiro(db)
 
     st.title("🍝 Ñam Ñam")
@@ -802,7 +851,8 @@ def render():
     promos = _leer_promos(db)
 
     items = _armar_items(productos, promos)
-    total = sum(_float(i.get("subtotal")) for i in items)
+    subtotal_productos = sum(_float(i.get("subtotal")) for i in items)
+    total = subtotal_productos
     unidades = sum(_float(i.get("cantidad")) for i in items)
 
     opciones_nav = ["Categorías", "Promos", f"Carrito ({unidades:g})"]
@@ -1042,7 +1092,7 @@ def render():
                         on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _remove_qty(t, i)),
                     )
 
-            st.markdown(f"## Total: {money(total)}")
+            st.markdown(f"## Subtotal: {money(subtotal_productos)}")
 
         st.divider()
         st.subheader("👤 Datos del pedido")
@@ -1059,12 +1109,23 @@ def render():
         st.divider()
         st.subheader("🚚 Entrega")
 
-        tipo_entrega = st.radio("¿Cómo querés recibir el pedido?", ["Retira en local", "Envío a domicilio"], horizontal=True)
+        opciones_entrega = []
+        if permitir_retiro:
+            opciones_entrega.append("Retira en local")
+        if permitir_envio:
+            opciones_entrega.append("Envío a domicilio")
+
+        if not opciones_entrega:
+            st.error("Por el momento no hay opciones de entrega activas. Consultá por WhatsApp.")
+            return
+
+        tipo_entrega = st.radio("¿Cómo querés recibir el pedido?", opciones_entrega, horizontal=True)
 
         punto_retiro = None
         direccion = ""
         barrio = ""
         referencia = ""
+        costo_envio = 0.0
 
         if tipo_entrega == "Retira en local":
             punto_retiro = st.selectbox("¿Dónde querés retirar?", list(puntos_retiro.keys()))
@@ -1072,21 +1133,46 @@ def render():
             st.info(f"📍 {info['direccion']}\n\n🕒 {info['horarios']}")
         else:
             st.info(horario_reparto)
+            if texto_aclaratorio_entrega:
+                st.caption(texto_aclaratorio_entrega)
             direccion = st.text_input("Dirección *")
             barrio = st.text_input("Barrio")
             referencia = st.text_input("Referencia", placeholder="Ej: portón negro, casa verde, tocar timbre")
 
-        programar = st.radio("Horario", ["Lo antes posible", "Programar fecha y hora"], horizontal=True)
+            if envio_gratis_desde > 0 and subtotal_productos >= envio_gratis_desde:
+                costo_envio = 0.0
+                st.success(f"🚚 Envío sin cargo por superar {money(envio_gratis_desde)}")
+            else:
+                costo_envio = costo_envio_config
+                if envio_gratis_desde > 0:
+                    falta = max(envio_gratis_desde - subtotal_productos, 0)
+                    st.info(f"🚚 Envío: {money(costo_envio)}. Te faltan {money(falta)} para envío sin cargo.")
+                else:
+                    st.info(f"🚚 Envío: {money(costo_envio)}")
+
+        total = subtotal_productos + costo_envio
+
+        st.markdown("### 💵 Resumen")
+        st.write(f"Subtotal productos: **{money(subtotal_productos)}**")
+        if tipo_entrega == "Envío a domicilio":
+            st.write(f"Envío: **{'Sin cargo' if costo_envio == 0 else money(costo_envio)}**")
+        else:
+            st.write("Envío: **$0**")
+        st.markdown(f"## Total: {money(total)}")
+
+        horario_opcion = st.radio("Horario", ["Lo antes posible", "Programar fecha y hora"], horizontal=True)
 
         fecha_entrega = None
         hora_entrega = None
 
-        if programar == "Programar fecha y hora":
+        if horario_opcion == "Programar fecha y hora":
             cfecha, chora = st.columns(2)
             fecha_entrega = cfecha.date_input("Fecha")
             hora_entrega = chora.time_input("Hora")
+        else:
+            st.caption("Tomaremos el pedido para el próximo horario disponible según retiro o reparto.")
 
-        observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
+        observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, después de las 18 hs, etc.")
 
         confirmar = st.button("✅ Confirmar pedido", use_container_width=True)
 
@@ -1116,6 +1202,8 @@ def render():
                 "cliente_nombre": nombre.strip(),
                 "telefono_cliente": telefono.strip(),
                 "estado": "Pendiente",
+                "subtotal_productos": subtotal_productos,
+                "costo_envio": costo_envio,
                 "total": total,
                 "observaciones": observaciones.strip(),
                 "pagado": pagado,
@@ -1126,6 +1214,7 @@ def render():
                 "direccion_entrega": direccion.strip(),
                 "barrio_entrega": barrio.strip(),
                 "referencia_entrega": referencia.strip(),
+                "horario_entrega": horario_opcion,
                 "fecha_entrega": fecha_entrega.isoformat() if fecha_entrega else None,
                 "hora_entrega": hora_entrega.isoformat() if hora_entrega else None,
             }).execute().data[0]
@@ -1148,7 +1237,10 @@ def render():
                 hora_entrega.isoformat() if hora_entrega else None,
                 forma_pago,
                 items,
+                subtotal_productos,
+                costo_envio,
                 total,
+                horario_opcion,
             )
 
             url = (
@@ -1169,9 +1261,12 @@ def render():
                 "direccion": direccion.strip(),
                 "barrio": barrio.strip(),
                 "referencia": referencia.strip(),
+                "horario_opcion": horario_opcion,
                 "fecha": fecha_entrega.isoformat() if fecha_entrega else None,
                 "hora": hora_entrega.isoformat() if hora_entrega else None,
                 "items": items,
+                "subtotal_productos": subtotal_productos,
+                "costo_envio": costo_envio,
                 "total": total,
             }
 
