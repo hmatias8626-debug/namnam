@@ -45,20 +45,6 @@ def _get_config(db, clave, default=""):
         return default
 
 
-def _config_bool(db, clave, default=True):
-    valor = str(_get_config(db, clave, "1" if default else "0")).strip().lower()
-    return valor in ["1", "true", "si", "sí", "yes", "on"]
-
-
-def _config_float(db, clave, default=0):
-    valor = str(_get_config(db, clave, str(default))).strip()
-    valor = valor.replace("$", "").replace(" ", "").replace(".", "").replace(",", ".")
-    try:
-        return float(valor or 0)
-    except Exception:
-        return float(default or 0)
-
-
 def _leer_locales_retiro(db):
     try:
         locales = (
@@ -166,14 +152,14 @@ def _init_cart():
         st.session_state["cliente_productos"] = {}
     if "cliente_promos" not in st.session_state:
         st.session_state["cliente_promos"] = {}
+    if "cliente_promos_flex" not in st.session_state:
+        st.session_state["cliente_promos_flex"] = {}
     if "pedido_online_confirmado" not in st.session_state:
         st.session_state["pedido_online_confirmado"] = False
     if "pedido_online_wa_url" not in st.session_state:
         st.session_state["pedido_online_wa_url"] = ""
     if "pedido_online_resumen" not in st.session_state:
         st.session_state["pedido_online_resumen"] = None
-    if "catalogo_seccion" not in st.session_state:
-        st.session_state["catalogo_seccion"] = "Categorías"
 
 
 def _get_qty(tipo, item_id):
@@ -199,21 +185,10 @@ def _change_qty(tipo, item_id, delta):
     _set_qty(tipo, item_id, max(0, actual + delta))
 
 
-def _remove_qty(tipo, item_id):
-    _set_qty(tipo, item_id, 0)
-
-
-def _set_qty_from_input(tipo, item_id, key):
-    _set_qty(tipo, item_id, st.session_state.get(key, 0))
-
-
-def _set_seccion(seccion):
-    st.session_state["catalogo_seccion"] = seccion
-
-
 def _limpiar_carrito():
     st.session_state["cliente_productos"] = {}
     st.session_state["cliente_promos"] = {}
+    st.session_state["cliente_promos_flex"] = {}
     st.session_state["pedido_online_confirmado"] = False
     st.session_state["pedido_online_wa_url"] = ""
     st.session_state["pedido_online_resumen"] = None
@@ -246,6 +221,135 @@ def _leer_detalle_promo(db, promo_id):
         )
     except Exception:
         return []
+
+
+def _leer_promos_flexibles(db):
+    try:
+        return (
+            db.table("namnam_promos_flexibles")
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _familia_producto_valor(p):
+    return str(
+        p.get("familia")
+        or p.get("categoria")
+        or p.get("categoría")
+        or p.get("rubro")
+        or p.get("grupo")
+        or "Otros"
+    ).strip()
+
+
+def _productos_para_promo_flexible(productos, promo):
+    familia = str(promo.get("familia_incluida") or "").strip().lower()
+    excluir = str(promo.get("texto_excluir") or "").strip().lower()
+    res = []
+
+    for p in productos:
+        fam = _familia_producto_valor(p).lower()
+        nombre = str(p.get("nombre") or "").lower()
+
+        if familia and fam != familia:
+            continue
+
+        if excluir and (excluir in fam or excluir in nombre):
+            continue
+
+        res.append(p)
+
+    return res
+
+
+def _flex_key(promo_id, producto_id):
+    return f"{promo_id}:{producto_id}"
+
+
+def _get_flex_qty(promo_id, producto_id):
+    if "cliente_promos_flex" not in st.session_state:
+        st.session_state["cliente_promos_flex"] = {}
+    return _float(st.session_state["cliente_promos_flex"].get(_flex_key(promo_id, producto_id), 0))
+
+
+def _set_flex_qty(promo_id, producto_id, value):
+    if "cliente_promos_flex" not in st.session_state:
+        st.session_state["cliente_promos_flex"] = {}
+
+    key = _flex_key(promo_id, producto_id)
+    value = _float(value)
+
+    if value <= 0:
+        st.session_state["cliente_promos_flex"].pop(key, None)
+    else:
+        st.session_state["cliente_promos_flex"][key] = value
+
+
+def _change_flex_qty(promo_id, producto_id, delta):
+    actual = _get_flex_qty(promo_id, producto_id)
+    _set_flex_qty(promo_id, producto_id, max(0, actual + delta))
+
+
+def _set_flex_qty_from_input(promo_id, producto_id, key):
+    _set_flex_qty(promo_id, producto_id, st.session_state.get(key, 0))
+
+
+def _flex_total_seleccionado(promo_id):
+    if "cliente_promos_flex" not in st.session_state:
+        st.session_state["cliente_promos_flex"] = {}
+
+    prefix = f"{promo_id}:"
+    return sum(
+        _float(v)
+        for k, v in st.session_state["cliente_promos_flex"].items()
+        if str(k).startswith(prefix)
+    )
+
+
+def _armar_items_flexibles(productos, promos_flexibles):
+    items = []
+
+    for promo in promos_flexibles:
+        promo_id = promo["id"]
+        requerido = _float(promo.get("cantidad_requerida"))
+        seleccionado = _flex_total_seleccionado(promo_id)
+
+        if seleccionado <= 0 or seleccionado != requerido:
+            continue
+
+        detalle = []
+        for p in _productos_para_promo_flexible(productos, promo):
+            cant = _get_flex_qty(promo_id, p["id"])
+            if cant > 0:
+                detalle.append({
+                    "producto_id": p["id"],
+                    "producto_nombre": p.get("nombre"),
+                    "cantidad": cant,
+                })
+
+        precio = _float(promo.get("precio"))
+
+        items.append({
+            "tipo": "promo_flexible",
+            "producto_id": None,
+            "producto_nombre": promo.get("nombre"),
+            "cantidad": 1,
+            "precio_unitario": precio,
+            "subtotal": precio,
+            "promo_id": None,
+            "promo_flexible_id": promo_id,
+            "promo_flexible_nombre": promo.get("nombre"),
+            "detalle_flexible": detalle,
+        })
+
+    return items
 
 
 def _armar_items(productos, promos):
@@ -284,24 +388,7 @@ def _armar_items(productos, promos):
     return items
 
 
-def _mensaje_whatsapp(
-    pedido_id,
-    nombre,
-    telefono,
-    tipo_entrega,
-    punto_retiro,
-    direccion,
-    barrio,
-    referencia,
-    fecha,
-    hora,
-    forma_pago,
-    items,
-    subtotal_productos,
-    costo_envio,
-    total,
-    horario_opcion,
-):
+def _mensaje_whatsapp(pedido_id, nombre, telefono, tipo_entrega, punto_retiro, direccion, barrio, referencia, fecha, hora, forma_pago, items, total):
     lineas = [
         f"🍝 Nuevo pedido Ñam Ñam #{pedido_id}",
         "",
@@ -321,27 +408,24 @@ def _mensaje_whatsapp(
         if referencia:
             lineas.append(f"Referencia: {referencia}")
 
-    if horario_opcion == "Lo antes posible":
-        lineas.append("Horario solicitado: Lo antes posible")
-    else:
-        lineas.append("Horario solicitado: Programado")
-        lineas.append(f"Fecha: {fecha or 'A coordinar'}")
-        lineas.append(f"Hora: {hora or 'A coordinar'}")
-
-    lineas += ["", "Pedido:"]
+    lineas += [
+        f"Fecha: {fecha or 'A coordinar'}",
+        f"Hora: {hora or 'A coordinar'}",
+        "",
+        "Pedido:",
+    ]
 
     for it in items:
         lineas.append(f"- {it['cantidad']:g} x {it['producto_nombre']} = {money(it['subtotal'])}")
 
-    lineas += ["", f"Subtotal productos: {money(subtotal_productos)}"]
+        if it.get("detalle_flexible"):
+            for det in it.get("detalle_flexible") or []:
+                lineas.append(f"  • {det['cantidad']:g} x {det['producto_nombre']}")
 
-    if tipo_entrega == "Envío a domicilio":
-        lineas.append(f"Envío: {'Sin cargo' if costo_envio == 0 else money(costo_envio)}")
-    else:
-        lineas.append("Envío: $0")
+    lineas += ["", f"Total: {money(total)}"]
 
-    lineas.append(f"Total: {money(total)}")
     return "\n".join(lineas)
+
 
 def _css():
     st.markdown("""
@@ -543,229 +627,6 @@ def _css():
             padding: 14px 18px !important;
         }
     }
-
-    /* ===== Ñam Ñam ordenado FINAL ===== */
-
-    .cat-name {
-        color: #FFF7E6 !important;
-        font-size: 14px !important;
-        font-weight: 950 !important;
-        line-height: 1.1 !important;
-        padding-top: 4px !important;
-    }
-
-    .cat-sub {
-        color: #FFF7E6 !important;
-        font-size: 10px !important;
-        font-weight: 750 !important;
-        opacity: .9 !important;
-        line-height: 1.05 !important;
-    }
-
-    .item-name {
-        color: #FFF7E6 !important;
-        font-size: 14px !important;
-        font-weight: 950 !important;
-        line-height: 1.1 !important;
-        margin-bottom: 1px !important;
-    }
-
-    .item-sub {
-        color: #FFF7E6 !important;
-        font-size: 11px !important;
-        font-weight: 750 !important;
-        opacity: .95 !important;
-        line-height: 1.05 !important;
-        margin-bottom: 5px !important;
-    }
-
-    div[data-testid="stNumberInput"] {
-        width: 54px !important;
-        min-width: 54px !important;
-        max-width: 54px !important;
-    }
-
-    div[data-testid="stNumberInput"] button {
-        display: none !important;
-    }
-
-    input[type="number"] {
-        width: 54px !important;
-        min-width: 54px !important;
-        max-width: 54px !important;
-        height: 31px !important;
-        min-height: 31px !important;
-        font-size: 13px !important;
-        font-weight: 950 !important;
-        text-align: center !important;
-        padding: 0 !important;
-        border-radius: 9px !important;
-    }
-
-    div[data-testid="column"] .stButton > button {
-        min-width: 34px !important;
-        width: 34px !important;
-        max-width: 34px !important;
-        min-height: 31px !important;
-        height: 31px !important;
-        padding: 0 !important;
-        font-size: 13px !important;
-        border-radius: 9px !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        color: #111111 !important;
-    }
-
-    /* Fila de controles: - cantidad + tachito, compacta */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
-        width: 190px !important;
-        max-width: 190px !important;
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 4px !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) > div[data-testid="column"] {
-        flex: 0 0 auto !important;
-        width: auto !important;
-        min-width: 0 !important;
-    }
-
-    /* Categorías: nombre a la izquierda, botón VER chico a la derecha */
-    .cat-row div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        gap: 8px !important;
-    }
-
-    .cat-row div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:first-child {
-        flex: 1 1 auto !important;
-        min-width: 0 !important;
-    }
-
-    .cat-row div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:last-child {
-        flex: 0 0 52px !important;
-        width: 52px !important;
-        min-width: 52px !important;
-    }
-
-    .cat-row div[data-testid="column"] .stButton > button {
-        width: 52px !important;
-        min-width: 52px !important;
-        max-width: 52px !important;
-        height: 31px !important;
-        min-height: 31px !important;
-        font-size: 11px !important;
-        border-radius: 9px !important;
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        padding-top: 0.35rem !important;
-        padding-bottom: 0.35rem !important;
-    }
-
-    @media (max-width: 650px) {
-        .main .block-container {
-            padding-left: 0.45rem !important;
-            padding-right: 0.45rem !important;
-        }
-
-        .item-name {
-            font-size: 13px !important;
-        }
-
-        .item-sub {
-            font-size: 10px !important;
-        }
-    }
-
-    /* ===== FIX FINAL controles cantidad: - 0 + basura juntos ===== */
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
-        display: grid !important;
-        grid-template-columns: 34px 56px 34px 34px !important;
-        justify-content: start !important;
-        align-items: center !important;
-        column-gap: 6px !important;
-        width: 160px !important;
-        max-width: 160px !important;
-        min-width: 160px !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) > div[data-testid="column"] {
-        width: auto !important;
-        min-width: 0 !important;
-        max-width: none !important;
-        flex: none !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) .stButton > button {
-        width: 34px !important;
-        min-width: 34px !important;
-        max-width: 34px !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        padding: 0 !important;
-        border-radius: 9px !important;
-        font-size: 13px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        color: #111111 !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"] {
-        width: 56px !important;
-        min-width: 56px !important;
-        max-width: 56px !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) input[type="number"] {
-        width: 56px !important;
-        min-width: 56px !important;
-        max-width: 56px !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        text-align: center !important;
-        padding: 0 !important;
-        font-size: 13px !important;
-        font-weight: 950 !important;
-        border-radius: 9px !important;
-    }
-
-    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"] button {
-        display: none !important;
-    }
-
-    @media (max-width: 650px) {
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
-            grid-template-columns: 32px 54px 32px 32px !important;
-            column-gap: 5px !important;
-            width: 150px !important;
-            min-width: 150px !important;
-            max-width: 150px !important;
-        }
-
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) .stButton > button {
-            width: 32px !important;
-            min-width: 32px !important;
-            max-width: 32px !important;
-            height: 31px !important;
-            min-height: 31px !important;
-        }
-
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"],
-        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) input[type="number"] {
-            width: 54px !important;
-            min-width: 54px !important;
-            max-width: 54px !important;
-        }
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -777,18 +638,12 @@ def _mostrar_confirmacion_final():
 
     pedido_id = resumen.get("pedido_id")
     total = resumen.get("total", 0)
-    costo_envio = _float(resumen.get("costo_envio", 0))
-
-    envio_txt = ""
-    if resumen.get("tipo_entrega") == "Envío a domicilio":
-        envio_txt = f"Envío: {'Sin cargo' if costo_envio == 0 else money(costo_envio)}<br>"
 
     st.markdown(
         f"""
         <div class="wa-alert">
             <div class="wa-alert-title">✅ Pedido #{pedido_id} registrado</div>
             <div class="wa-alert-text">
-                {envio_txt}
                 Total: {money(total)}<br>
                 Para confirmar, presioná WhatsApp.
             </div>
@@ -827,11 +682,6 @@ def render():
 
     whatsapp_negocio = _get_config(db, "whatsapp_pedidos", WHATSAPP_NEGOCIO_DEFAULT)
     horario_reparto = _get_config(db, "horario_reparto", HORARIO_REPARTO_DEFAULT)
-    texto_aclaratorio_entrega = _get_config(db, "texto_aclaratorio_entrega", "Los horarios son orientativos y se confirman por WhatsApp.")
-    permitir_envio = _config_bool(db, "permitir_envio", True)
-    permitir_retiro = _config_bool(db, "permitir_retiro", True)
-    costo_envio_config = _config_float(db, "costo_envio", 0)
-    envio_gratis_desde = _config_float(db, "envio_gratis_desde", 0)
     puntos_retiro = _leer_locales_retiro(db)
 
     st.title("🍝 Ñam Ñam")
@@ -849,36 +699,15 @@ def render():
         return
 
     promos = _leer_promos(db)
+    promos_flexibles = _leer_promos_flexibles(db)
 
-    items = _armar_items(productos, promos)
-    subtotal_productos = sum(_float(i.get("subtotal")) for i in items)
-    total = subtotal_productos
+    items = _armar_items(productos, promos) + _armar_items_flexibles(productos, promos_flexibles)
+    total = sum(_float(i.get("subtotal")) for i in items)
     unidades = sum(_float(i.get("cantidad")) for i in items)
 
-    opciones_nav = ["Categorías", "Promos", f"Carrito ({unidades:g})"]
-    actual_nav = st.session_state.get("catalogo_seccion", "Categorías")
+    tab_productos, tab_promos, tab_promos_flex, tab_carrito = st.tabs(["📂 Categorías", "🏷️ Promos", "🧺 Promos flexibles", f"🛒 Carrito ({unidades:g})"])
 
-    if actual_nav.startswith("Carrito"):
-        actual_index = 2
-    elif actual_nav == "Promos":
-        actual_index = 1
-    else:
-        actual_index = 0
-
-    nav = st.radio(
-        "Sección",
-        opciones_nav,
-        index=actual_index,
-        horizontal=True,
-        label_visibility="collapsed",
-    )
-
-    if nav.startswith("Carrito"):
-        st.session_state["catalogo_seccion"] = "Carrito"
-    else:
-        st.session_state["catalogo_seccion"] = nav
-
-    if st.session_state["catalogo_seccion"] == "Categorías":
+    with tab_productos:
         if not productos:
             st.info("Todavía no hay productos disponibles.")
         else:
@@ -905,28 +734,27 @@ def render():
                     )
 
                     with st.container(border=True):
-                        if cantidad_familia > 0:
-                            sub_txt = f"{cantidad_familia:g} agregados · {money(subtotal_familia)}"
-                        else:
-                            sub_txt = f"{len(productos_familia)} opciones"
-
-                        st.markdown('<div class="cat-row">', unsafe_allow_html=True)
-                        c_info, c_ver = st.columns([5, 1])
-
-                        c_info.markdown(
+                        st.markdown(
                             f"""
-                            <div class="cat-name">{_emoji_familia(familia)} {familia}</div>
-                            <div class="cat-sub">{sub_txt}</div>
+                            <div class="categoria-card">{_emoji_familia(familia)} {familia}</div>
                             """,
                             unsafe_allow_html=True,
                         )
 
-                        if c_ver.button("VER", key=f"ver_familia_{familia}"):
-                            st.session_state["cliente_categoria_abierta"] = familia
-                            st.session_state["catalogo_seccion"] = "Categorías"
-                            st.rerun()
+                        if cantidad_familia > 0:
+                            st.markdown(
+                                f"""<div class="categoria-sub">{cantidad_familia:g} productos agregados · {money(subtotal_familia)}</div>""",
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                f"""<div class="categoria-sub">{len(productos_familia)} opciones disponibles</div>""",
+                                unsafe_allow_html=True,
+                            )
 
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        if st.button("Ver productos", key=f"ver_familia_{familia}", use_container_width=True):
+                            st.session_state["cliente_categoria_abierta"] = familia
+                            st.rerun()
 
                 st.info("Entrá a una categoría para ver sus productos.")
 
@@ -941,35 +769,26 @@ def render():
 
                 for p in familias.get(categoria_abierta, []):
                     with st.container(border=True):
-                        qty = int(_get_qty("producto", p["id"]))
-
                         st.markdown(
                             f"""
-                            <div class="item-name">{p.get('nombre')}</div>
-                            <div class="item-sub">{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}</div>
+                            <div class="producto-nombre">{p.get('nombre')}</div>
+                            <div class="producto-info">{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}</div>
                             """,
                             unsafe_allow_html=True,
                         )
 
-                        c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
+                        qty = _get_qty("producto", p["id"])
+                        c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
-                        c_menos.button("−", key=f"menos_prod_{p['id']}", on_click=_change_qty, args=("producto", p["id"], -1))
+                        if c_menos.button("➖", key=f"menos_prod_{p['id']}", use_container_width=True):
+                            _change_qty("producto", p["id"], -1)
+                            st.rerun()
 
-                        key_qty = f"qty_prod_{p['id']}"
-                        c_qty.number_input(
-                            "Cantidad",
-                            min_value=0,
-                            step=1,
-                            value=qty,
-                            key=key_qty,
-                            label_visibility="collapsed",
-                            on_change=_set_qty_from_input,
-                            args=("producto", p["id"], key_qty),
-                        )
+                        c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
 
-                        c_mas.button("➕", key=f"mas_prod_{p['id']}", on_click=_change_qty, args=("producto", p["id"], 1))
-
-                        c_borrar.button("🗑️", key=f"borrar_prod_{p['id']}", on_click=_remove_qty, args=("producto", p["id"]))
+                        if c_mas.button("➕", key=f"mas_prod_{p['id']}", use_container_width=True):
+                            _change_qty("producto", p["id"], 1)
+                            st.rerun()
 
                 cantidad_categoria = sum(
                     _get_qty("producto", p["id"])
@@ -985,41 +804,20 @@ def render():
                         f"En {categoria_abierta}: {cantidad_categoria:g} unidades · {money(subtotal_categoria)}"
                     )
 
-    elif st.session_state["catalogo_seccion"] == "Promos":
+    with tab_promos:
         if not promos:
             st.info("Todavía no hay promociones disponibles.")
         else:
             for promo in promos:
                 with st.container(border=True):
-                    qty = int(_get_qty("promo", promo["id"]))
-
                     st.markdown(
                         f"""
-                        <div class="item-name">🏷️ {promo.get('nombre')}</div>
-                        <div class="item-sub">{money(promo.get('precio'))}</div>
+                        <div class="producto-nombre">🏷️ {promo.get('nombre')}</div>
+                        <div class="producto-info">{promo.get('descripcion') or ''}</div>
+                        <div class="producto-info"><strong>{money(promo.get('precio'))}</strong></div>
                         """,
                         unsafe_allow_html=True,
                     )
-
-                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
-
-                    c_menos.button("−", key=f"menos_promo_{promo['id']}", on_click=_change_qty, args=("promo", promo["id"], -1))
-
-                    key_qty = f"qty_promo_{promo['id']}"
-                    c_qty.number_input(
-                        "Cantidad",
-                        min_value=0,
-                        step=1,
-                        value=qty,
-                        key=key_qty,
-                        label_visibility="collapsed",
-                        on_change=_set_qty_from_input,
-                        args=("promo", promo["id"], key_qty),
-                    )
-
-                    c_mas.button("➕", key=f"mas_promo_{promo['id']}", on_click=_change_qty, args=("promo", promo["id"], 1))
-
-                    c_borrar.button("🗑️", key=f"borrar_promo_{promo['id']}", on_click=_remove_qty, args=("promo", promo["id"]))
 
                     detalles = _leer_detalle_promo(db, promo["id"])
                     if detalles:
@@ -1036,63 +834,118 @@ def render():
                                 hide_index=True
                             )
 
-    elif st.session_state["catalogo_seccion"] == "Carrito":
+                    qty = _get_qty("promo", promo["id"])
+                    c_menos, c_qty, c_mas = st.columns([1, 1, 1])
+
+                    if c_menos.button("➖", key=f"menos_promo_{promo['id']}", use_container_width=True):
+                        _change_qty("promo", promo["id"], -1)
+                        st.rerun()
+
+                    c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
+
+                    if c_mas.button("➕", key=f"mas_promo_{promo['id']}", use_container_width=True):
+                        _change_qty("promo", promo["id"], 1)
+                        st.rerun()
+
+
+    with tab_promos_flex:
+        if not promos_flexibles:
+            st.info("Todavía no hay promociones flexibles disponibles.")
+        else:
+            for promo_flex in promos_flexibles:
+                with st.container(border=True):
+                    promo_id = promo_flex["id"]
+                    requerido = _float(promo_flex.get("cantidad_requerida"))
+                    seleccionado = _flex_total_seleccionado(promo_id)
+                    faltan = max(0, requerido - seleccionado)
+
+                    st.markdown(f"### 🧺 {promo_flex.get('nombre')}")
+                    if promo_flex.get("descripcion"):
+                        st.caption(promo_flex.get("descripcion"))
+
+                    st.write(f"Elegidas: **{seleccionado:g} / {requerido:g}**")
+                    st.write(f"Precio promo: **{money(promo_flex.get('precio'))}**")
+
+                    if faltan > 0:
+                        st.warning(f"Faltan elegir {faltan:g}.")
+                    elif seleccionado > requerido:
+                        st.error(f"Te pasaste por {seleccionado - requerido:g}. Bajá cantidades.")
+                    else:
+                        st.success("Promo completa. Se agregará al carrito.")
+
+                    productos_flex = _productos_para_promo_flexible(productos, promo_flex)
+
+                    with st.expander("Elegir productos de la promo", expanded=True):
+                        if not productos_flex:
+                            st.info("No hay productos disponibles para esta promo.")
+                        else:
+                            for p in productos_flex:
+                                qty = int(_get_flex_qty(promo_id, p["id"]))
+
+                                st.markdown(
+                                    f"""
+                                    <div class="producto-nombre">{p.get('nombre')}</div>
+                                    <div class="producto-info">{p.get('unidad') or 'unidad'} · incluido en promo</div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+
+                                c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
+
+                                c_menos.button(
+                                    "−",
+                                    key=f"flex_menos_{promo_id}_{p['id']}",
+                                    on_click=_change_flex_qty,
+                                    args=(promo_id, p["id"], -1),
+                                )
+
+                                key_qty = f"flex_qty_{promo_id}_{p['id']}"
+                                c_qty.number_input(
+                                    "Cantidad",
+                                    min_value=0,
+                                    step=1,
+                                    value=qty,
+                                    key=key_qty,
+                                    label_visibility="collapsed",
+                                    on_change=_set_flex_qty_from_input,
+                                    args=(promo_id, p["id"], key_qty),
+                                )
+
+                                c_mas.button(
+                                    "➕",
+                                    key=f"flex_mas_{promo_id}_{p['id']}",
+                                    on_click=_change_flex_qty,
+                                    args=(promo_id, p["id"], 1),
+                                )
+
+                                c_borrar.button(
+                                    "🗑️",
+                                    key=f"flex_borrar_{promo_id}_{p['id']}",
+                                    on_click=_set_flex_qty,
+                                    args=(promo_id, p["id"], 0),
+                                )
+
+    with tab_carrito:
         st.subheader("🛒 Tu pedido")
 
         if not items:
             st.info("Todavía no agregaste productos.")
         else:
-            st.caption("Podés tocar el número y escribir la cantidad.")
+            st.dataframe(
+                pd.DataFrame([
+                    {
+                        "Detalle": i.get("producto_nombre"),
+                        "Cantidad": i.get("cantidad"),
+                        "Precio": money(i.get("precio_unitario")),
+                        "Subtotal": money(i.get("subtotal")),
+                    }
+                    for i in items
+                ]),
+                use_container_width=True,
+                hide_index=True
+            )
 
-            for it in items:
-                tipo_item = it.get("tipo")
-                item_id = it.get("promo_id") if tipo_item == "promo" else it.get("producto_id")
-                nombre_item = it.get("producto_nombre")
-                precio_unitario = _float(it.get("precio_unitario"))
-                cantidad_item = int(_float(it.get("cantidad")))
-                subtotal_item = _float(it.get("subtotal"))
-
-                with st.container(border=True):
-                    st.markdown(
-                        f"""
-                        <div class="item-name">{nombre_item}</div>
-                        <div class="item-sub">{money(precio_unitario)} c/u · Subtotal: {money(subtotal_item)}</div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
-
-                    c_menos.button(
-                        "−",
-                        key=f"cart_menos_{tipo_item}_{item_id}",
-                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _change_qty(t, i, -1)),
-                    )
-
-                    key_qty = f"cart_qty_{tipo_item}_{item_id}"
-                    c_qty.number_input(
-                        "Cantidad",
-                        min_value=0,
-                        step=1,
-                        value=cantidad_item,
-                        key=key_qty,
-                        label_visibility="collapsed",
-                        on_change=lambda t=tipo_item, i=item_id, k=key_qty: (_set_seccion("Carrito"), _set_qty_from_input(t, i, k)),
-                    )
-
-                    c_mas.button(
-                        "➕",
-                        key=f"cart_mas_{tipo_item}_{item_id}",
-                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _change_qty(t, i, 1)),
-                    )
-
-                    c_borrar.button(
-                        "🗑️",
-                        key=f"cart_borrar_{tipo_item}_{item_id}",
-                        on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _remove_qty(t, i)),
-                    )
-
-            st.markdown(f"## Subtotal: {money(subtotal_productos)}")
+            st.markdown(f"## Total: {money(total)}")
 
         st.divider()
         st.subheader("👤 Datos del pedido")
@@ -1109,23 +962,12 @@ def render():
         st.divider()
         st.subheader("🚚 Entrega")
 
-        opciones_entrega = []
-        if permitir_retiro:
-            opciones_entrega.append("Retira en local")
-        if permitir_envio:
-            opciones_entrega.append("Envío a domicilio")
-
-        if not opciones_entrega:
-            st.error("Por el momento no hay opciones de entrega activas. Consultá por WhatsApp.")
-            return
-
-        tipo_entrega = st.radio("¿Cómo querés recibir el pedido?", opciones_entrega, horizontal=True)
+        tipo_entrega = st.radio("¿Cómo querés recibir el pedido?", ["Retira en local", "Envío a domicilio"], horizontal=True)
 
         punto_retiro = None
         direccion = ""
         barrio = ""
         referencia = ""
-        costo_envio = 0.0
 
         if tipo_entrega == "Retira en local":
             punto_retiro = st.selectbox("¿Dónde querés retirar?", list(puntos_retiro.keys()))
@@ -1133,55 +975,40 @@ def render():
             st.info(f"📍 {info['direccion']}\n\n🕒 {info['horarios']}")
         else:
             st.info(horario_reparto)
-            if texto_aclaratorio_entrega:
-                st.caption(texto_aclaratorio_entrega)
             direccion = st.text_input("Dirección *")
             barrio = st.text_input("Barrio")
             referencia = st.text_input("Referencia", placeholder="Ej: portón negro, casa verde, tocar timbre")
 
-            if envio_gratis_desde > 0 and subtotal_productos >= envio_gratis_desde:
-                costo_envio = 0.0
-                st.success(f"🚚 Envío sin cargo por superar {money(envio_gratis_desde)}")
-            else:
-                costo_envio = costo_envio_config
-                if envio_gratis_desde > 0:
-                    falta = max(envio_gratis_desde - subtotal_productos, 0)
-                    st.info(f"🚚 Envío: {money(costo_envio)}. Te faltan {money(falta)} para envío sin cargo.")
-                else:
-                    st.info(f"🚚 Envío: {money(costo_envio)}")
-
-        total = subtotal_productos + costo_envio
-
-        st.markdown("### 💵 Resumen")
-        st.write(f"Subtotal productos: **{money(subtotal_productos)}**")
-        if tipo_entrega == "Envío a domicilio":
-            st.write(f"Envío: **{'Sin cargo' if costo_envio == 0 else money(costo_envio)}**")
-        else:
-            st.write("Envío: **$0**")
-        st.markdown(f"## Total: {money(total)}")
-
-        horario_opcion = st.radio("Horario", ["Lo antes posible", "Programar fecha y hora"], horizontal=True)
+        programar = st.radio("Horario", ["Lo antes posible", "Programar fecha y hora"], horizontal=True)
 
         fecha_entrega = None
         hora_entrega = None
 
-        if horario_opcion == "Programar fecha y hora":
+        if programar == "Programar fecha y hora":
             cfecha, chora = st.columns(2)
             fecha_entrega = cfecha.date_input("Fecha")
             hora_entrega = chora.time_input("Hora")
-        else:
-            st.caption("Tomaremos el pedido para el próximo horario disponible según retiro o reparto.")
 
-        observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, después de las 18 hs, etc.")
+        observaciones = st.text_area("Observaciones", placeholder="Ej: sin cebolla, llamar al llegar, etc.")
 
         confirmar = st.button("✅ Confirmar pedido", use_container_width=True)
 
         if st.button("🗑️ Limpiar carrito", use_container_width=True):
             _limpiar_carrito()
-            st.session_state["catalogo_seccion"] = "Carrito"
             st.rerun()
 
         if confirmar:
+            for promo_flex in promos_flexibles:
+                seleccionado_flex = _flex_total_seleccionado(promo_flex["id"])
+                requerido_flex = _float(promo_flex.get("cantidad_requerida"))
+
+                if seleccionado_flex > 0 and seleccionado_flex != requerido_flex:
+                    st.warning(
+                        f"La promo '{promo_flex.get('nombre')}' necesita exactamente {requerido_flex:g} unidades. "
+                        f"Ahora tiene {seleccionado_flex:g}."
+                    )
+                    return
+
             if not items:
                 st.warning("Agregá al menos un producto o una promo.")
                 return
@@ -1202,8 +1029,6 @@ def render():
                 "cliente_nombre": nombre.strip(),
                 "telefono_cliente": telefono.strip(),
                 "estado": "Pendiente",
-                "subtotal_productos": subtotal_productos,
-                "costo_envio": costo_envio,
                 "total": total,
                 "observaciones": observaciones.strip(),
                 "pagado": pagado,
@@ -1214,7 +1039,6 @@ def render():
                 "direccion_entrega": direccion.strip(),
                 "barrio_entrega": barrio.strip(),
                 "referencia_entrega": referencia.strip(),
-                "horario_entrega": horario_opcion,
                 "fecha_entrega": fecha_entrega.isoformat() if fecha_entrega else None,
                 "hora_entrega": hora_entrega.isoformat() if hora_entrega else None,
             }).execute().data[0]
@@ -1222,7 +1046,29 @@ def render():
             for it in items:
                 it["pedido_id"] = pedido["id"]
 
-            db.table(table("pedido_detalles")).insert(items).execute()
+            detalles_para_insertar = []
+            flex_items_para_insertar = []
+
+            for it in items:
+                it_db = dict(it)
+                detalle_flexible = it_db.pop("detalle_flexible", None)
+                detalles_para_insertar.append(it_db)
+
+                if detalle_flexible and it.get("promo_flexible_id"):
+                    for det in detalle_flexible:
+                        flex_items_para_insertar.append({
+                            "pedido_id": pedido["id"],
+                            "promo_flexible_id": it.get("promo_flexible_id"),
+                            "producto_id": det.get("producto_id"),
+                            "producto_nombre": det.get("producto_nombre"),
+                            "cantidad": det.get("cantidad"),
+                        })
+
+            if detalles_para_insertar:
+                db.table(table("pedido_detalles")).insert(detalles_para_insertar).execute()
+
+            if flex_items_para_insertar:
+                db.table("namnam_pedido_promo_flexible_items").insert(flex_items_para_insertar).execute()
 
             mensaje = _mensaje_whatsapp(
                 pedido["id"],
@@ -1237,10 +1083,7 @@ def render():
                 hora_entrega.isoformat() if hora_entrega else None,
                 forma_pago,
                 items,
-                subtotal_productos,
-                costo_envio,
                 total,
-                horario_opcion,
             )
 
             url = (
@@ -1261,12 +1104,9 @@ def render():
                 "direccion": direccion.strip(),
                 "barrio": barrio.strip(),
                 "referencia": referencia.strip(),
-                "horario_opcion": horario_opcion,
                 "fecha": fecha_entrega.isoformat() if fecha_entrega else None,
                 "hora": hora_entrega.isoformat() if hora_entrega else None,
                 "items": items,
-                "subtotal_productos": subtotal_productos,
-                "costo_envio": costo_envio,
                 "total": total,
             }
 
