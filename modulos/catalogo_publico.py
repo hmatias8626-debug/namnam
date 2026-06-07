@@ -646,6 +646,88 @@ def _css():
             font-size: 10px !important;
         }
     }
+
+    /* ===== FIX FINAL controles cantidad: - 0 + basura juntos ===== */
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
+        display: grid !important;
+        grid-template-columns: 34px 56px 34px 34px !important;
+        justify-content: start !important;
+        align-items: center !important;
+        column-gap: 6px !important;
+        width: 160px !important;
+        max-width: 160px !important;
+        min-width: 160px !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) > div[data-testid="column"] {
+        width: auto !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        flex: none !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) .stButton > button {
+        width: 34px !important;
+        min-width: 34px !important;
+        max-width: 34px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        padding: 0 !important;
+        border-radius: 9px !important;
+        font-size: 13px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #111111 !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"] {
+        width: 56px !important;
+        min-width: 56px !important;
+        max-width: 56px !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) input[type="number"] {
+        width: 56px !important;
+        min-width: 56px !important;
+        max-width: 56px !important;
+        height: 32px !important;
+        min-height: 32px !important;
+        text-align: center !important;
+        padding: 0 !important;
+        font-size: 13px !important;
+        font-weight: 950 !important;
+        border-radius: 9px !important;
+    }
+
+    div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"] button {
+        display: none !important;
+    }
+
+    @media (max-width: 650px) {
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) {
+            grid-template-columns: 32px 54px 32px 32px !important;
+            column-gap: 5px !important;
+            width: 150px !important;
+            min-width: 150px !important;
+            max-width: 150px !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) .stButton > button {
+            width: 32px !important;
+            min-width: 32px !important;
+            max-width: 32px !important;
+            height: 31px !important;
+            min-height: 31px !important;
+        }
+
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) div[data-testid="stNumberInput"],
+        div[data-testid="stHorizontalBlock"]:has(div[data-testid="stNumberInput"]) input[type="number"] {
+            width: 54px !important;
+            min-width: 54px !important;
+            max-width: 54px !important;
+        }
+    }
     </style>
     """, unsafe_allow_html=True)
 
