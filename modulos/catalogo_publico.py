@@ -189,6 +189,10 @@ def _remove_qty(tipo, item_id):
     _set_qty(tipo, item_id, 0)
 
 
+def _set_qty_from_input(tipo, item_id, key):
+    _set_qty(tipo, item_id, st.session_state.get(key, 0))
+
+
 def _set_seccion(seccion):
     st.session_state["catalogo_seccion"] = seccion
 
@@ -446,41 +450,86 @@ def _css():
         padding-top: 8px !important;
     }
 
-    .carrito-card {
+    .linea-categoria {
         color: #FFF7E6 !important;
         font-size: 15px !important;
-        font-weight: 900 !important;
-        line-height: 1.18 !important;
-        margin-bottom: 3px !important;
+        font-weight: 950 !important;
+        line-height: 1.15 !important;
+        padding-top: 6px !important;
+    }
+
+    .linea-categoria-sub {
+        color: #FFF7E6 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        opacity: .9 !important;
+    }
+
+    .producto-linea-nombre {
+        color: #FFF7E6 !important;
+        font-size: 14px !important;
+        font-weight: 950 !important;
+        line-height: 1.15 !important;
+        padding-top: 5px !important;
+    }
+
+    .producto-linea-info {
+        color: #FFF7E6 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        opacity: .9 !important;
+        line-height: 1.10 !important;
+    }
+
+    .carrito-card {
+        color: #FFF7E6 !important;
+        font-size: 14px !important;
+        font-weight: 950 !important;
+        line-height: 1.15 !important;
+        padding-top: 5px !important;
     }
 
     .carrito-sub {
         color: #FFF7E6 !important;
-        font-size: 12px !important;
+        font-size: 11px !important;
         font-weight: 700 !important;
         opacity: .95 !important;
-        margin-bottom: 6px !important;
     }
 
-    .qty-num-small {
-        color: #FFF7E6 !important;
-        font-size: 20px !important;
-        font-weight: 1000 !important;
+    /* Número editable compacto */
+    input[type="number"] {
         text-align: center !important;
-        padding-top: 5px !important;
-        min-width: 22px !important;
-    }
-
-    /* Botones chicos del carrito */
-    div[data-testid="column"] .stButton > button {
+        padding-left: 2px !important;
+        padding-right: 2px !important;
         min-height: 34px !important;
-        padding: 0.20rem 0.40rem !important;
+        height: 34px !important;
+        font-size: 14px !important;
+        font-weight: 950 !important;
+        border-radius: 10px !important;
     }
 
-    /* Navegación superior más compacta */
-    div[role="radiogroup"] label {
+    div[data-testid="stNumberInput"] {
+        max-width: 70px !important;
+    }
+
+    div[data-testid="stNumberInput"] button {
+        display: none !important;
+    }
+
+    /* Botones compactos */
+    div[data-testid="column"] .stButton > button {
+        min-width: 34px !important;
+        width: 34px !important;
+        min-height: 34px !important;
+        height: 34px !important;
+        padding: 0 !important;
         font-size: 14px !important;
-        padding: 0.25rem 0.45rem !important;
+        border-radius: 10px !important;
+    }
+
+    .btn-ver-wrap .stButton > button,
+    div[data-testid="column"] .stButton > button[kind="secondary"] {
+        width: auto !important;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -665,26 +714,24 @@ def render():
                     )
 
                     with st.container(border=True):
-                        st.markdown(
+                        c_info, c_ver = st.columns([5, 1])
+
+                        if cantidad_familia > 0:
+                            sub_txt = f"{cantidad_familia:g} agregados · {money(subtotal_familia)}"
+                        else:
+                            sub_txt = f"{len(productos_familia)} opciones"
+
+                        c_info.markdown(
                             f"""
-                            <div class="categoria-card">{_emoji_familia(familia)} {familia}</div>
+                            <div class="linea-categoria">{_emoji_familia(familia)} {familia}</div>
+                            <div class="linea-categoria-sub">{sub_txt}</div>
                             """,
                             unsafe_allow_html=True,
                         )
 
-                        if cantidad_familia > 0:
-                            st.markdown(
-                                f"""<div class="categoria-sub">{cantidad_familia:g} productos agregados · {money(subtotal_familia)}</div>""",
-                                unsafe_allow_html=True,
-                            )
-                        else:
-                            st.markdown(
-                                f"""<div class="categoria-sub">{len(productos_familia)} opciones disponibles</div>""",
-                                unsafe_allow_html=True,
-                            )
-
-                        if st.button("Ver productos", key=f"ver_familia_{familia}", use_container_width=True):
+                        if c_ver.button("VER", key=f"ver_familia_{familia}"):
                             st.session_state["cliente_categoria_abierta"] = familia
+                            st.session_state["catalogo_seccion"] = "Categorías"
                             st.rerun()
 
                 st.info("Entrá a una categoría para ver sus productos.")
@@ -700,16 +747,17 @@ def render():
 
                 for p in familias.get(categoria_abierta, []):
                     with st.container(border=True):
-                        st.markdown(
+                        qty = int(_get_qty("producto", p["id"]))
+
+                        c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+
+                        c_info.markdown(
                             f"""
-                            <div class="producto-nombre">{p.get('nombre')}</div>
-                            <div class="producto-info">{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}</div>
+                            <div class="producto-linea-nombre">{p.get('nombre')}</div>
+                            <div class="producto-linea-info">{p.get('unidad') or 'unidad'} · {money(p.get('precio_venta'))}</div>
                             """,
                             unsafe_allow_html=True,
                         )
-
-                        qty = _get_qty("producto", p["id"])
-                        c_menos, c_qty, c_mas = st.columns([1, 1, 1])
 
                         c_menos.button(
                             "−",
@@ -718,13 +766,30 @@ def render():
                             args=("producto", p["id"], -1),
                         )
 
-                        c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
+                        key_qty = f"qty_prod_{p['id']}"
+                        c_qty.number_input(
+                            "Cantidad",
+                            min_value=0,
+                            step=1,
+                            value=qty,
+                            key=key_qty,
+                            label_visibility="collapsed",
+                            on_change=_set_qty_from_input,
+                            args=("producto", p["id"], key_qty),
+                        )
 
                         c_mas.button(
                             "+",
                             key=f"mas_prod_{p['id']}",
                             on_click=_change_qty,
                             args=("producto", p["id"], 1),
+                        )
+
+                        c_borrar.button(
+                            "🗑️",
+                            key=f"borrar_prod_{p['id']}",
+                            on_click=_remove_qty,
+                            args=("producto", p["id"]),
                         )
 
                 cantidad_categoria = sum(
@@ -747,13 +812,49 @@ def render():
         else:
             for promo in promos:
                 with st.container(border=True):
-                    st.markdown(
+                    qty = int(_get_qty("promo", promo["id"]))
+
+                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+
+                    c_info.markdown(
                         f"""
-                        <div class="producto-nombre">🏷️ {promo.get('nombre')}</div>
-                        <div class="producto-info">{promo.get('descripcion') or ''}</div>
-                        <div class="producto-info"><strong>{money(promo.get('precio'))}</strong></div>
+                        <div class="producto-linea-nombre">🏷️ {promo.get('nombre')}</div>
+                        <div class="producto-linea-info">{money(promo.get('precio'))}</div>
                         """,
                         unsafe_allow_html=True,
+                    )
+
+                    c_menos.button(
+                        "−",
+                        key=f"menos_promo_{promo['id']}",
+                        on_click=_change_qty,
+                        args=("promo", promo["id"], -1),
+                    )
+
+                    key_qty = f"qty_promo_{promo['id']}"
+                    c_qty.number_input(
+                        "Cantidad",
+                        min_value=0,
+                        step=1,
+                        value=qty,
+                        key=key_qty,
+                        label_visibility="collapsed",
+                        on_change=_set_qty_from_input,
+                        args=("promo", promo["id"], key_qty),
+                    )
+
+                    c_mas.button(
+                        "+",
+                        key=f"mas_promo_{promo['id']}",
+                        on_click=_change_qty,
+                        args=("promo", promo["id"], 1),
+                    )
+
+                    c_borrar.button(
+                        "🗑️",
+                        key=f"borrar_promo_{promo['id']}",
+                        on_click=_remove_qty,
+                        args=("promo", promo["id"]),
                     )
 
                     detalles = _leer_detalle_promo(db, promo["id"])
@@ -771,43 +872,26 @@ def render():
                                 hide_index=True
                             )
 
-                    qty = _get_qty("promo", promo["id"])
-                    c_menos, c_qty, c_mas = st.columns([1, 1, 1])
-
-                    c_menos.button(
-                        "−",
-                        key=f"menos_promo_{promo['id']}",
-                        on_click=_change_qty,
-                        args=("promo", promo["id"], -1),
-                    )
-
-                    c_qty.markdown(f"""<div class="qty-num">{qty:g}</div>""", unsafe_allow_html=True)
-
-                    c_mas.button(
-                        "+",
-                        key=f"mas_promo_{promo['id']}",
-                        on_click=_change_qty,
-                        args=("promo", promo["id"], 1),
-                    )
-
     elif st.session_state["catalogo_seccion"] == "Carrito":
         st.subheader("🛒 Tu pedido")
 
         if not items:
             st.info("Todavía no agregaste productos.")
         else:
-            st.caption("Podés modificar las cantidades antes de confirmar.")
+            st.caption("Podés tocar el número y escribir la cantidad.")
 
             for it in items:
                 tipo_item = it.get("tipo")
                 item_id = it.get("promo_id") if tipo_item == "promo" else it.get("producto_id")
                 nombre_item = it.get("producto_nombre")
                 precio_unitario = _float(it.get("precio_unitario"))
-                cantidad_item = _float(it.get("cantidad"))
+                cantidad_item = int(_float(it.get("cantidad")))
                 subtotal_item = _float(it.get("subtotal"))
 
                 with st.container(border=True):
-                    st.markdown(
+                    c_info, c_menos, c_qty, c_mas, c_borrar = st.columns([4.0, 0.45, 0.75, 0.45, 0.50])
+
+                    c_info.markdown(
                         f"""
                         <div class="carrito-card">{nombre_item}</div>
                         <div class="carrito-sub">{money(precio_unitario)} c/u · Subtotal: {money(subtotal_item)}</div>
@@ -815,15 +899,22 @@ def render():
                         unsafe_allow_html=True,
                     )
 
-                    c_menos, c_qty, c_mas, c_borrar, c_espacio = st.columns([0.55, 0.45, 0.55, 0.55, 3.0])
-
                     c_menos.button(
                         "−",
                         key=f"cart_menos_{tipo_item}_{item_id}",
                         on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _change_qty(t, i, -1)),
                     )
 
-                    c_qty.markdown(f"""<div class="qty-num-small">{cantidad_item:g}</div>""", unsafe_allow_html=True)
+                    key_qty = f"cart_qty_{tipo_item}_{item_id}"
+                    c_qty.number_input(
+                        "Cantidad",
+                        min_value=0,
+                        step=1,
+                        value=cantidad_item,
+                        key=key_qty,
+                        label_visibility="collapsed",
+                        on_change=lambda t=tipo_item, i=item_id, k=key_qty: (_set_seccion("Carrito"), _set_qty_from_input(t, i, k)),
+                    )
 
                     c_mas.button(
                         "+",
