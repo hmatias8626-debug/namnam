@@ -21,6 +21,7 @@ from modulos.colaboradores import render as render_colaboradores
 from modulos.perfil import render as render_perfil
 from modulos.locales import render as render_locales
 from modulos.configuracion import render as render_configuracion
+from modulos.catalogo_publico import render as render_catalogo_publico
 
 apply_theme()
 
@@ -179,6 +180,11 @@ div[data-testid="stAppViewContainer"] .main .block-container {{
     }}
     </style>
     """, unsafe_allow_html=True)
+
+# Catálogo público para clientes.
+if st.query_params.get("modo") == "cliente":
+    render_catalogo_publico()
+    st.stop()
 
 # Antes del login no se muestra menú lateral ni páginas.
 if not is_logged_in():
