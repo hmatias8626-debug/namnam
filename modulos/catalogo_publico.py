@@ -506,58 +506,52 @@ def _css():
         }
     }
 
-    /* ===== Ñam Ñam catálogo responsive compacto ===== */
-
-    .cat-line-name {
-        color: #FFF7E6 !important;
-        font-size: 15px !important;
-        font-weight: 950 !important;
-        line-height: 1.12 !important;
-        padding-top: 5px !important;
-    }
-
-    .cat-line-sub {
-        color: #FFF7E6 !important;
-        font-size: 11px !important;
-        font-weight: 700 !important;
-        opacity: .9 !important;
-        line-height: 1.05 !important;
-    }
+    /* ===== FIX Ñam Ñam: categorías y controles compactos ===== */
 
     .item-name {
         color: #FFF7E6 !important;
         font-size: 14px !important;
         font-weight: 950 !important;
-        line-height: 1.10 !important;
-        padding-top: 5px !important;
+        line-height: 1.12 !important;
+        margin-bottom: 1px !important;
     }
 
     .item-sub {
         color: #FFF7E6 !important;
         font-size: 11px !important;
         font-weight: 750 !important;
-        opacity: .95 !important;
         line-height: 1.05 !important;
+        opacity: .95 !important;
+        margin-bottom: 6px !important;
     }
 
-    .control-row {
-        display: flex !important;
-        align-items: center !important;
-        gap: 6px !important;
-        flex-wrap: nowrap !important;
-        margin-top: 4px !important;
+    .cat-sub {
+        color: #FFF7E6 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        opacity: .9 !important;
+        margin-top: -4px !important;
+        margin-bottom: 0 !important;
+    }
+
+    .control-area {
+        max-width: 210px !important;
     }
 
     div[data-testid="stNumberInput"] {
-        max-width: 58px !important;
-        min-width: 58px !important;
-        width: 58px !important;
+        width: 56px !important;
+        min-width: 56px !important;
+        max-width: 56px !important;
+    }
+
+    div[data-testid="stNumberInput"] button {
+        display: none !important;
     }
 
     input[type="number"] {
-        width: 58px !important;
-        min-width: 58px !important;
-        max-width: 58px !important;
+        width: 56px !important;
+        min-width: 56px !important;
+        max-width: 56px !important;
         height: 32px !important;
         min-height: 32px !important;
         font-size: 13px !important;
@@ -565,10 +559,6 @@ def _css():
         text-align: center !important;
         padding: 0 !important;
         border-radius: 9px !important;
-    }
-
-    div[data-testid="stNumberInput"] button {
-        display: none !important;
     }
 
     div[data-testid="column"] .stButton > button {
@@ -586,150 +576,55 @@ def _css():
         color: #111111 !important;
     }
 
-    /* El botón VER de categorías es corto */
-    .cat-ver-row div[data-testid="column"] .stButton > button {
-        min-width: 52px !important;
-        width: 52px !important;
-        max-width: 52px !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        font-size: 12px !important;
+    /* Botones de categorías: texto tipo "SORRENTINOS  VER", bajo y compacto */
+    .categoria-boton .stButton > button {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 34px !important;
+        min-height: 34px !important;
+        justify-content: flex-start !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+        font-size: 13px !important;
+        font-weight: 950 !important;
+        border-radius: 12px !important;
     }
 
-    /* Tarjetas menos altas */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         padding-top: 0.35rem !important;
         padding-bottom: 0.35rem !important;
     }
 
-    @media (min-width: 651px) {
-        .mobile-only-space {
-            display: none !important;
-        }
-    }
-
     @media (max-width: 650px) {
+        .item-name {
+            font-size: 13px !important;
+        }
+
+        .item-sub,
+        .cat-sub {
+            font-size: 10px !important;
+        }
+
         .main .block-container {
             padding-left: 0.45rem !important;
             padding-right: 0.45rem !important;
         }
 
-        .cat-line-name {
-            font-size: 14px !important;
-        }
-
-        .cat-line-sub {
-            font-size: 10px !important;
-        }
-
-        .item-name {
-            font-size: 13px !important;
-        }
-
-        .item-sub {
-            font-size: 10px !important;
-        }
-
-        div[data-testid="stNumberInput"] {
-            max-width: 54px !important;
-            min-width: 54px !important;
-            width: 54px !important;
-        }
-
-        input[type="number"] {
-            width: 54px !important;
-            min-width: 54px !important;
-            max-width: 54px !important;
-            height: 31px !important;
-            min-height: 31px !important;
-        }
-
-        div[data-testid="column"] .stButton > button {
-            min-width: 32px !important;
-            width: 32px !important;
-            max-width: 32px !important;
-            min-height: 31px !important;
-            height: 31px !important;
-        }
-
-        /* En celular vertical: nombre arriba y controles abajo, todos juntos */
-        .mobile-controls div[data-testid="stHorizontalBlock"] {
+        /* SOLO filas con 4 columnas, que son controles - cantidad + basura */
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(4)):not(:has(> div[data-testid="column"]:nth-child(5))) {
             flex-direction: row !important;
             flex-wrap: nowrap !important;
             gap: 0.25rem !important;
             align-items: center !important;
+            justify-content: flex-start !important;
+            width: 210px !important;
+            max-width: 210px !important;
         }
 
-        .mobile-controls div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {
+        div[data-testid="stHorizontalBlock"]:has(> div[data-testid="column"]:nth-child(4)):not(:has(> div[data-testid="column"]:nth-child(5))) > div[data-testid="column"] {
             flex: 0 0 auto !important;
             width: auto !important;
             min-width: 0 !important;
-        }
-    }
-
-    /* Controles compactos del catálogo */
-    .item-name {
-        color: #FFF7E6 !important;
-        font-size: 14px !important;
-        font-weight: 950 !important;
-        line-height: 1.10 !important;
-        padding-top: 5px !important;
-    }
-
-    .item-sub {
-        color: #FFF7E6 !important;
-        font-size: 11px !important;
-        font-weight: 750 !important;
-        opacity: .95 !important;
-        line-height: 1.05 !important;
-        margin-bottom: 4px !important;
-    }
-
-    div[data-testid="stNumberInput"] {
-        max-width: 56px !important;
-        min-width: 56px !important;
-        width: 56px !important;
-    }
-
-    div[data-testid="stNumberInput"] button {
-        display: none !important;
-    }
-
-    input[type="number"] {
-        width: 56px !important;
-        min-width: 56px !important;
-        max-width: 56px !important;
-        height: 32px !important;
-        min-height: 32px !important;
-        font-size: 13px !important;
-        font-weight: 950 !important;
-        text-align: center !important;
-        padding: 0 !important;
-        border-radius: 9px !important;
-    }
-
-    div[data-testid="column"] .stButton > button {
-        min-width: 34px !important;
-        width: 34px !important;
-        max-width: 34px !important;
-        min-height: 32px !important;
-        height: 32px !important;
-        padding: 0 !important;
-        font-size: 13px !important;
-        border-radius: 9px !important;
-        display: inline-flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        color: #111111 !important;
-    }
-
-    @media (max-width: 650px) {
-        .item-name {
-            font-size: 13px !important;
-        }
-
-        .item-sub {
-            font-size: 10px !important;
         }
     }
     </style>
@@ -859,25 +754,19 @@ def render():
                     )
 
                     with st.container(border=True):
-                        c_info, c_ver = st.columns([5, 1])
-
                         if cantidad_familia > 0:
                             sub_txt = f"{cantidad_familia:g} agregados · {money(subtotal_familia)}"
                         else:
                             sub_txt = f"{len(productos_familia)} opciones"
 
-                        st.markdown(
-                            f"""
-                            <div class="cat-line-name">{_emoji_familia(familia)} {familia}</div>
-                            <div class="cat-line-sub">{sub_txt}</div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                        if c_ver.button("VER", key=f"ver_familia_{familia}"):
+                        st.markdown('<div class="categoria-boton">', unsafe_allow_html=True)
+                        if st.button(f"{_emoji_familia(familia)} {familia}    VER", key=f"ver_familia_{familia}", use_container_width=True):
                             st.session_state["cliente_categoria_abierta"] = familia
                             st.session_state["catalogo_seccion"] = "Categorías"
                             st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                        st.markdown(f"""<div class="cat-sub">{sub_txt}</div>""", unsafe_allow_html=True)
 
                 st.info("Entrá a una categoría para ver sus productos.")
 
@@ -902,7 +791,6 @@ def render():
                             unsafe_allow_html=True,
                         )
 
-                        st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
                         c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                         c_menos.button(
@@ -937,7 +825,6 @@ def render():
                             on_click=_remove_qty,
                             args=("producto", p["id"]),
                         )
-                        st.markdown('</div>', unsafe_allow_html=True)
 
                 cantidad_categoria = sum(
                     _get_qty("producto", p["id"])
@@ -969,7 +856,6 @@ def render():
                         unsafe_allow_html=True,
                     )
 
-                    st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
                     c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                     c_menos.button(
@@ -1004,7 +890,6 @@ def render():
                         on_click=_remove_qty,
                         args=("promo", promo["id"]),
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
 
                     detalles = _leer_detalle_promo(db, promo["id"])
                     if detalles:
@@ -1046,7 +931,6 @@ def render():
                         unsafe_allow_html=True,
                     )
 
-                    st.markdown('<div class="mobile-controls">', unsafe_allow_html=True)
                     c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
 
                     c_menos.button(
@@ -1077,7 +961,6 @@ def render():
                         key=f"cart_borrar_{tipo_item}_{item_id}",
                         on_click=lambda t=tipo_item, i=item_id: (_set_seccion("Carrito"), _remove_qty(t, i)),
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown(f"## Total: {money(total)}")
 
