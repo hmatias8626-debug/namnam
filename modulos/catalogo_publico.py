@@ -154,6 +154,9 @@ def _init_cart():
         st.session_state["cliente_promos"] = {}
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
+    st.session_state["cliente_promos_combo"] = {}
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
     if "pedido_online_confirmado" not in st.session_state:
         st.session_state["pedido_online_confirmado"] = False
     if "pedido_online_wa_url" not in st.session_state:
@@ -189,6 +192,7 @@ def _limpiar_carrito():
     st.session_state["cliente_productos"] = {}
     st.session_state["cliente_promos"] = {}
     st.session_state["cliente_promos_flex"] = {}
+    st.session_state["cliente_promos_combo"] = {}
     st.session_state["pedido_online_confirmado"] = False
     st.session_state["pedido_online_wa_url"] = ""
     st.session_state["pedido_online_resumen"] = None
@@ -276,12 +280,18 @@ def _flex_key(promo_id, producto_id):
 def _get_flex_qty(promo_id, producto_id):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
+    st.session_state["cliente_promos_combo"] = {}
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
     return _float(st.session_state["cliente_promos_flex"].get(_flex_key(promo_id, producto_id), 0))
 
 
 def _set_flex_qty(promo_id, producto_id, value):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
+    st.session_state["cliente_promos_combo"] = {}
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
 
     key = _flex_key(promo_id, producto_id)
     value = _float(value)
@@ -304,6 +314,9 @@ def _set_flex_qty_from_input(promo_id, producto_id, key):
 def _flex_total_seleccionado(promo_id):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
+    st.session_state["cliente_promos_combo"] = {}
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
 
     prefix = f"{promo_id}:"
     return sum(
@@ -349,6 +362,99 @@ def _armar_items_flexibles(productos, promos_flexibles):
             "detalle_flexible": detalle,
         })
 
+    return items
+
+
+def _leer_promos_combinadas(db):
+    try:
+        return db.table("namnam_promos_combinadas").select("*").eq("activo", True).order("id").execute().data or []
+    except Exception:
+        return []
+
+
+def _leer_grupos_promo_combinada(db, promo_id):
+    try:
+        return db.table("namnam_promos_combinadas_grupos").select("*").eq("promo_id", promo_id).order("orden").execute().data or []
+    except Exception:
+        return []
+
+
+def _combo_key(promo_id, grupo_id, producto_id):
+    return f"{promo_id}:{grupo_id}:{producto_id}"
+
+
+def _get_combo_qty(promo_id, grupo_id, producto_id):
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
+    return _float(st.session_state["cliente_promos_combo"].get(_combo_key(promo_id, grupo_id, producto_id), 0))
+
+
+def _set_combo_qty(promo_id, grupo_id, producto_id, value):
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
+    key = _combo_key(promo_id, grupo_id, producto_id)
+    value = _float(value)
+    if value <= 0:
+        st.session_state["cliente_promos_combo"].pop(key, None)
+    else:
+        st.session_state["cliente_promos_combo"][key] = value
+
+
+def _change_combo_qty(promo_id, grupo_id, producto_id, delta):
+    actual = _get_combo_qty(promo_id, grupo_id, producto_id)
+    _set_combo_qty(promo_id, grupo_id, producto_id, max(0, actual + delta))
+
+
+def _set_combo_qty_from_input(promo_id, grupo_id, producto_id, key):
+    _set_combo_qty(promo_id, grupo_id, producto_id, st.session_state.get(key, 0))
+
+
+def _combo_total_grupo(promo_id, grupo_id):
+    if "cliente_promos_combo" not in st.session_state:
+        st.session_state["cliente_promos_combo"] = {}
+    prefix = f"{promo_id}:{grupo_id}:"
+    return sum(_float(v) for k, v in st.session_state["cliente_promos_combo"].items() if str(k).startswith(prefix))
+
+
+def _productos_para_grupo_combinado(productos, grupo):
+    familia = str(grupo.get("familia") or "").strip().lower()
+    excluir = str(grupo.get("texto_excluir") or "").strip().lower()
+    res = []
+    for p in productos:
+        fam = _familia_producto_valor(p).lower()
+        nombre = str(p.get("nombre") or "").lower()
+        if familia and fam != familia:
+            continue
+        if excluir and (excluir in fam or excluir in nombre):
+            continue
+        res.append(p)
+    return res
+
+
+def _armar_items_combinados(productos, promos_combinadas, grupos_por_promo):
+    items = []
+    for promo in promos_combinadas:
+        promo_id = promo["id"]
+        grupos = grupos_por_promo.get(promo_id, [])
+        if not grupos:
+            continue
+        completa = True
+        detalle = []
+        for grupo in grupos:
+            grupo_id = grupo["id"]
+            requerido = _float(grupo.get("cantidad_requerida"))
+            seleccionado = _combo_total_grupo(promo_id, grupo_id)
+            if seleccionado != requerido:
+                completa = False
+                break
+            for p in _productos_para_grupo_combinado(productos, grupo):
+                cant = _get_combo_qty(promo_id, grupo_id, p["id"])
+                if cant > 0:
+                    detalle.append({"grupo_id": grupo_id, "familia": grupo.get("familia"), "producto_id": p["id"], "producto_nombre": p.get("nombre"), "cantidad": cant})
+        if not completa:
+            continue
+        precio = _float(promo.get("precio"))
+        items.append({"tipo": "promo_combinada", "producto_id": None, "producto_nombre": promo.get("nombre"), "cantidad": 1, "precio_unitario": precio, "subtotal": precio, "promo_id": None, "promo_combinada_id": promo_id, "promo_combinada_nombre": promo.get("nombre"), "detalle_combinada": detalle})
     return items
 
 
@@ -421,6 +527,10 @@ def _mensaje_whatsapp(pedido_id, nombre, telefono, tipo_entrega, punto_retiro, d
         if it.get("detalle_flexible"):
             for det in it.get("detalle_flexible") or []:
                 lineas.append(f"  • {det['cantidad']:g} x {det['producto_nombre']}")
+
+        if it.get("detalle_combinada"):
+            for det in it.get("detalle_combinada") or []:
+                lineas.append(f"  • {det['familia']}: {det['cantidad']:g} x {det['producto_nombre']}")
 
     lineas += ["", f"Total: {money(total)}"]
 
@@ -700,12 +810,14 @@ def render():
 
     promos = _leer_promos(db)
     promos_flexibles = _leer_promos_flexibles(db)
+    promos_combinadas = _leer_promos_combinadas(db)
+    grupos_combinadas = {promo["id"]: _leer_grupos_promo_combinada(db, promo["id"]) for promo in promos_combinadas}
 
-    items = _armar_items(productos, promos) + _armar_items_flexibles(productos, promos_flexibles)
+    items = (_armar_items(productos, promos) + _armar_items_flexibles(productos, promos_flexibles) + _armar_items_combinados(productos, promos_combinadas, grupos_combinadas))
     total = sum(_float(i.get("subtotal")) for i in items)
     unidades = sum(_float(i.get("cantidad")) for i in items)
 
-    tab_productos, tab_promos, tab_promos_flex, tab_carrito = st.tabs(["📂 Categorías", "🏷️ Promos", "🧺 Promos flexibles", f"🛒 Carrito ({unidades:g})"])
+    tab_productos, tab_promos, tab_promos_flex, tab_promos_combo, tab_carrito = st.tabs(["📂 Categorías", "🏷️ Promos", "🧺 Flexibles", "🧩 Combinadas", f"🛒 Carrito ({unidades:g})"])
 
     with tab_productos:
         if not productos:
@@ -925,6 +1037,58 @@ def render():
                                     args=(promo_id, p["id"], 0),
                                 )
 
+
+    with tab_promos_combo:
+        if not promos_combinadas:
+            st.info("Todavía no hay promociones combinadas disponibles.")
+        else:
+            for promo_combo in promos_combinadas:
+                promo_id = promo_combo["id"]
+                grupos = grupos_combinadas.get(promo_id, [])
+                with st.container(border=True):
+                    st.markdown(f"### 🧩 {promo_combo.get('nombre')}")
+                    if promo_combo.get("descripcion"):
+                        st.caption(promo_combo.get("descripcion"))
+                    st.write(f"Precio promo: **{money(promo_combo.get('precio'))}**")
+                    completa = True
+                    for grupo in grupos:
+                        grupo_id = grupo["id"]
+                        requerido = _float(grupo.get("cantidad_requerida"))
+                        seleccionado = _combo_total_grupo(promo_id, grupo_id)
+                        if seleccionado != requerido:
+                            completa = False
+                        titulo_grupo = f"{grupo.get('familia')} — {seleccionado:g} / {requerido:g}"
+                        with st.expander(titulo_grupo, expanded=True):
+                            if seleccionado < requerido:
+                                st.warning(f"Faltan elegir {requerido - seleccionado:g}.")
+                            elif seleccionado > requerido:
+                                st.error(f"Te pasaste por {seleccionado - requerido:g}. Bajá cantidades.")
+                            else:
+                                st.success("Grupo completo.")
+                            productos_grupo = _productos_para_grupo_combinado(productos, grupo)
+                            if not productos_grupo:
+                                st.info("No hay productos disponibles para este grupo.")
+                            else:
+                                for p in productos_grupo:
+                                    qty = int(_get_combo_qty(promo_id, grupo_id, p["id"]))
+                                    total_grupo = _combo_total_grupo(promo_id, grupo_id)
+                                    deshabilitar_sumar = total_grupo >= requerido and qty <= 0
+                                    max_manual = int(qty + max(0, requerido - total_grupo))
+                                    st.markdown(f"""
+                                        <div class="producto-nombre">{p.get('nombre')}</div>
+                                        <div class="producto-info">{p.get('unidad') or 'unidad'} · grupo {grupo.get('familia')}</div>
+                                    """, unsafe_allow_html=True)
+                                    c_menos, c_qty, c_mas, c_borrar = st.columns([1, 1, 1, 1])
+                                    c_menos.button("−", key=f"combo_menos_{promo_id}_{grupo_id}_{p['id']}", on_click=_change_combo_qty, args=(promo_id, grupo_id, p["id"], -1))
+                                    key_qty = f"combo_qty_{promo_id}_{grupo_id}_{p['id']}"
+                                    c_qty.number_input("Cantidad", min_value=0, max_value=max(0, max_manual), step=1, value=qty, key=key_qty, label_visibility="collapsed", on_change=_set_combo_qty_from_input, args=(promo_id, grupo_id, p["id"], key_qty))
+                                    c_mas.button("➕", key=f"combo_mas_{promo_id}_{grupo_id}_{p['id']}", on_click=_change_combo_qty, args=(promo_id, grupo_id, p["id"], 1), disabled=deshabilitar_sumar)
+                                    c_borrar.button("🗑️", key=f"combo_borrar_{promo_id}_{grupo_id}_{p['id']}", on_click=_set_combo_qty, args=(promo_id, grupo_id, p["id"], 0))
+                    if completa and grupos:
+                        st.success("Promo combinada completa. Se agregará al carrito.")
+                    else:
+                        st.info("Completá todos los grupos para sumar esta promo al carrito.")
+
     with tab_carrito:
         st.subheader("🛒 Tu pedido")
 
@@ -1001,13 +1165,18 @@ def render():
             for promo_flex in promos_flexibles:
                 seleccionado_flex = _flex_total_seleccionado(promo_flex["id"])
                 requerido_flex = _float(promo_flex.get("cantidad_requerida"))
-
                 if seleccionado_flex > 0 and seleccionado_flex != requerido_flex:
-                    st.warning(
-                        f"La promo '{promo_flex.get('nombre')}' necesita exactamente {requerido_flex:g} unidades. "
-                        f"Ahora tiene {seleccionado_flex:g}."
-                    )
+                    st.warning(f"La promo '{promo_flex.get('nombre')}' necesita exactamente {requerido_flex:g} unidades. Ahora tiene {seleccionado_flex:g}.")
                     return
+
+            for promo_combo in promos_combinadas:
+                promo_id_combo = promo_combo["id"]
+                for grupo_combo in grupos_combinadas.get(promo_id_combo, []):
+                    seleccionado_combo = _combo_total_grupo(promo_id_combo, grupo_combo["id"])
+                    requerido_combo = _float(grupo_combo.get("cantidad_requerida"))
+                    if seleccionado_combo > 0 and seleccionado_combo != requerido_combo:
+                        st.warning(f"La promo '{promo_combo.get('nombre')}' necesita exactamente {requerido_combo:g} de {grupo_combo.get('familia')}. Ahora tiene {seleccionado_combo:g}.")
+                        return
 
             if not items:
                 st.warning("Agregá al menos un producto o una promo.")
@@ -1048,10 +1217,12 @@ def render():
 
             detalles_para_insertar = []
             flex_items_para_insertar = []
+            combo_items_para_insertar = []
 
             for it in items:
                 it_db = dict(it)
                 detalle_flexible = it_db.pop("detalle_flexible", None)
+                detalle_combinada = it_db.pop("detalle_combinada", None)
                 detalles_para_insertar.append(it_db)
 
                 if detalle_flexible and it.get("promo_flexible_id"):
@@ -1064,11 +1235,18 @@ def render():
                             "cantidad": det.get("cantidad"),
                         })
 
+                if detalle_combinada and it.get("promo_combinada_id"):
+                    for det in detalle_combinada:
+                        combo_items_para_insertar.append({"pedido_id": pedido["id"], "promo_combinada_id": it.get("promo_combinada_id"), "grupo_id": det.get("grupo_id"), "familia": det.get("familia"), "producto_id": det.get("producto_id"), "producto_nombre": det.get("producto_nombre"), "cantidad": det.get("cantidad")})
+
             if detalles_para_insertar:
                 db.table(table("pedido_detalles")).insert(detalles_para_insertar).execute()
 
             if flex_items_para_insertar:
                 db.table("namnam_pedido_promo_flexible_items").insert(flex_items_para_insertar).execute()
+
+            if combo_items_para_insertar:
+                db.table("namnam_pedido_promo_combinada_items").insert(combo_items_para_insertar).execute()
 
             mensaje = _mensaje_whatsapp(
                 pedido["id"],
