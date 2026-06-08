@@ -1,12 +1,10 @@
-from datetime import datetime
-
 import pandas as pd
 import streamlit as st
 
 from services.db import require_db, fetch_table, money, table
 from services.ui import header
 
-ESTADOS = ["Pendiente", "En Producción", "Listo", "En reparto", "Entregado"]
+ESTADOS = ["Pendiente", "En preparación", "Listo", "En reparto", "Entregado"]
 FORMAS_MINORISTA = ["Efectivo", "Transferencia", "Mercado Pago", "Pendiente"]
 FORMAS_MAYORISTA = ["Cobrar ahora", "Usar saldo mayorista"]
 
@@ -49,7 +47,7 @@ def _emoji_familia(familia):
         return "🍕"
     if "sfija" in f:
         return "🥟"
-    if "bombita" in f:
+    if "bombita" in f or "bomba" in f:
         return "🧆"
     if "sandwich" in f or "sándwich" in f:
         return "🥪"
@@ -58,10 +56,14 @@ def _emoji_familia(familia):
     return "📦"
 
 
-def _precio_para_cliente(producto, cliente):
-    if (cliente or {}).get("tipo_cliente") == "Mayorista":
+def _precio_para_tipo(producto, tipo_venta):
+    if tipo_venta == "Mayorista":
         return _float(producto.get("precio_mayorista") or producto.get("precio_venta"))
     return _float(producto.get("precio_venta"))
+
+
+def _precio_mayorista(producto):
+    return _float(producto.get("precio_mayorista") or producto.get("precio_venta"))
 
 
 def _registrar_caja(db, pedido, forma_pago):
@@ -120,6 +122,7 @@ def _ordenar_familias(familias):
         "Pizzas",
         "Sfijas",
         "Bombitas de papa",
+        "Bombas de papa",
         "Sandwiches de miga",
         "Torta salada",
         "Otros",
@@ -141,11 +144,129 @@ def _ordenar_familias(familias):
     return familias_ordenadas
 
 
+def _leer_promos(db):
+    try:
+        return (
+            db.table("namnam_promos")
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _leer_detalle_promo(db, promo_id):
+    try:
+        return (
+            db.table("namnam_promos_detalle")
+            .select("*")
+            .eq("promo_id", promo_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _leer_promos_flexibles(db):
+    try:
+        return (
+            db.table("namnam_promos_flexibles")
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _leer_promos_combinadas(db):
+    try:
+        return (
+            db.table("namnam_promos_combinadas")
+            .select("*")
+            .eq("activo", True)
+            .order("id")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _leer_grupos_promo_combinada(db, promo_id):
+    try:
+        return (
+            db.table("namnam_promos_combinadas_grupos")
+            .select("*")
+            .eq("promo_id", promo_id)
+            .order("orden")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
+
+
+def _productos_para_promo_flexible(productos, promo):
+    familia = str(promo.get("familia_incluida") or "").strip().lower()
+    excluir = str(promo.get("texto_excluir") or "").strip().lower()
+    res = []
+
+    for p in productos:
+        fam = _familia_producto(p).lower()
+        nombre = str(p.get("nombre") or "").lower()
+
+        if familia and fam != familia:
+            continue
+
+        if excluir and (excluir in fam or excluir in nombre):
+            continue
+
+        res.append(p)
+
+    return res
+
+
+def _productos_para_grupo_combinado(productos, grupo):
+    familia = str(grupo.get("familia") or "").strip().lower()
+    excluir = str(grupo.get("texto_excluir") or "").strip().lower()
+    res = []
+
+    for p in productos:
+        fam = _familia_producto(p).lower()
+        nombre = str(p.get("nombre") or "").lower()
+
+        if familia and fam != familia:
+            continue
+
+        if excluir and (excluir in fam or excluir in nombre):
+            continue
+
+        res.append(p)
+
+    return res
+
+
 def _init_pedido_cantidades():
     if "pedido_cantidades" not in st.session_state:
         st.session_state["pedido_cantidades"] = {}
     if "pedido_promos" not in st.session_state:
         st.session_state["pedido_promos"] = {}
+    if "pedido_promos_flex" not in st.session_state:
+        st.session_state["pedido_promos_flex"] = {}
+    if "pedido_promos_combo" not in st.session_state:
+        st.session_state["pedido_promos_combo"] = {}
 
 
 def _get_cantidad(producto_id):
@@ -163,12 +284,16 @@ def _set_cantidad(producto_id, value):
         st.session_state["pedido_cantidades"][key] = value
 
 
-def _get_promo_cantidad(promo_id):
+def _sync_cantidad_widget(producto_id, widget_key):
+    _set_cantidad(producto_id, st.session_state.get(widget_key, 0))
+
+
+def _get_promo_qty(promo_id):
     _init_pedido_cantidades()
     return _float(st.session_state["pedido_promos"].get(str(promo_id), 0))
 
 
-def _set_promo_cantidad(promo_id, value):
+def _set_promo_qty(promo_id, value):
     _init_pedido_cantidades()
     value = _float(value)
     key = str(promo_id)
@@ -178,23 +303,95 @@ def _set_promo_cantidad(promo_id, value):
         st.session_state["pedido_promos"][key] = value
 
 
-def _sync_cantidad_widget(producto_id, widget_key):
-    _set_cantidad(producto_id, st.session_state.get(widget_key, 0))
-
-
 def _sync_promo_widget(promo_id, widget_key):
-    _set_promo_cantidad(promo_id, st.session_state.get(widget_key, 0))
+    _set_promo_qty(promo_id, st.session_state.get(widget_key, 0))
+
+
+def _flex_key(promo_id, producto_id):
+    return f"{promo_id}:{producto_id}"
+
+
+def _get_flex_qty(promo_id, producto_id):
+    _init_pedido_cantidades()
+    return _float(st.session_state["pedido_promos_flex"].get(_flex_key(promo_id, producto_id), 0))
+
+
+def _set_flex_qty(promo_id, producto_id, value):
+    _init_pedido_cantidades()
+    key = _flex_key(promo_id, producto_id)
+    value = _float(value)
+
+    if value <= 0:
+        st.session_state["pedido_promos_flex"].pop(key, None)
+    else:
+        st.session_state["pedido_promos_flex"][key] = value
+
+
+def _sync_flex_widget(promo_id, producto_id, widget_key):
+    _set_flex_qty(promo_id, producto_id, st.session_state.get(widget_key, 0))
+
+
+def _flex_total_seleccionado(promo_id):
+    _init_pedido_cantidades()
+    prefix = f"{promo_id}:"
+    return sum(
+        _float(v)
+        for k, v in st.session_state["pedido_promos_flex"].items()
+        if str(k).startswith(prefix)
+    )
+
+
+def _combo_key(promo_id, grupo_id, producto_id):
+    return f"{promo_id}:{grupo_id}:{producto_id}"
+
+
+def _get_combo_qty(promo_id, grupo_id, producto_id):
+    _init_pedido_cantidades()
+    return _float(st.session_state["pedido_promos_combo"].get(_combo_key(promo_id, grupo_id, producto_id), 0))
+
+
+def _set_combo_qty(promo_id, grupo_id, producto_id, value):
+    _init_pedido_cantidades()
+    key = _combo_key(promo_id, grupo_id, producto_id)
+    value = _float(value)
+
+    if value <= 0:
+        st.session_state["pedido_promos_combo"].pop(key, None)
+    else:
+        st.session_state["pedido_promos_combo"][key] = value
+
+
+def _sync_combo_widget(promo_id, grupo_id, producto_id, widget_key):
+    _set_combo_qty(promo_id, grupo_id, producto_id, st.session_state.get(widget_key, 0))
+
+
+def _combo_total_grupo(promo_id, grupo_id):
+    _init_pedido_cantidades()
+    prefix = f"{promo_id}:{grupo_id}:"
+    return sum(
+        _float(v)
+        for k, v in st.session_state["pedido_promos_combo"].items()
+        if str(k).startswith(prefix)
+    )
 
 
 def _limpiar_pedido():
     st.session_state["pedido_cantidades"] = {}
     st.session_state["pedido_promos"] = {}
+    st.session_state["pedido_promos_flex"] = {}
+    st.session_state["pedido_promos_combo"] = {}
+
     for k in list(st.session_state.keys()):
-        if str(k).startswith("cant_widget_") or str(k).startswith("promo_widget_"):
+        if (
+            str(k).startswith("cant_widget_")
+            or str(k).startswith("promo_widget_")
+            or str(k).startswith("flex_widget_")
+            or str(k).startswith("combo_widget_")
+        ):
             del st.session_state[k]
 
 
-def _resumen_items(familias_ordenadas, familias, cliente):
+def _resumen_items(familias_ordenadas, familias, tipo_venta):
     _init_pedido_cantidades()
     items = []
     resumen = []
@@ -204,7 +401,7 @@ def _resumen_items(familias_ordenadas, familias, cliente):
         unidades_familia = 0.0
 
         for p in familias[familia]:
-            precio = _precio_para_cliente(p, cliente)
+            precio = _precio_para_tipo(p, tipo_venta)
             cant = _get_cantidad(p["id"])
             subtotal = cant * precio
 
@@ -212,13 +409,11 @@ def _resumen_items(familias_ordenadas, familias, cliente):
                 unidades_familia += cant
                 subtotal_familia += subtotal
                 items.append({
-                    "tipo": "producto",
                     "producto_id": p["id"],
                     "producto_nombre": p["nombre"],
                     "cantidad": cant,
                     "precio_unitario": precio,
                     "subtotal": subtotal,
-                    "promo_id": None,
                 })
 
         resumen.append({
@@ -230,413 +425,665 @@ def _resumen_items(familias_ordenadas, familias, cliente):
     return items, resumen
 
 
-
-def _productos_por_id(productos):
-    return {p.get("id"): p for p in productos}
-
-
-def _precio_promo_para_cliente(db, promo, cliente, productos_por_id):
-    """
-    Minorista:
-        usa el precio fijo cargado en la promo.
-
-    Mayorista:
-        calcula el precio según los productos incluidos,
-        usando precio_mayorista de cada producto.
-    """
-    if (cliente or {}).get("tipo_cliente") != "Mayorista":
-        return _float(promo.get("precio"))
-
-    detalles = (
-        db.table("namnam_promos_detalle")
-        .select("*")
-        .eq("promo_id", promo["id"])
-        .execute()
-        .data
-        or []
-    )
-
-    total = 0.0
-
-    for d in detalles:
-        producto = productos_por_id.get(d.get("producto_id"))
-
-        if not producto:
-            continue
-
-        precio_mayorista = _float(
-            producto.get("precio_mayorista")
-            or producto.get("precio_venta")
-        )
-
-        total += _float(d.get("cantidad")) * precio_mayorista
-
-    return total
-
-def _resumen_promos(db, promos, cliente, productos):
-    _init_pedido_cantidades()
-    productos_por_id = _productos_por_id(productos)
+def _armar_items_promos_fijas(promos):
     items = []
 
     for promo in promos:
-        cant = _get_promo_cantidad(promo["id"])
-        precio = _precio_promo_para_cliente(db, promo, cliente, productos_por_id)
+        cant = _get_promo_qty(promo["id"])
+        if cant <= 0:
+            continue
+
+        precio = _float(promo.get("precio"))
         subtotal = cant * precio
 
-        if cant > 0:
-            items.append({
-                "tipo": "promo",
-                "producto_id": None,
-                "producto_nombre": promo.get("nombre"),
-                "cantidad": cant,
-                "precio_unitario": precio,
-                "subtotal": subtotal,
-                "promo_id": promo["id"],
-            })
+        items.append({
+            "producto_id": None,
+            "producto_nombre": promo.get("nombre"),
+            "cantidad": cant,
+            "precio_unitario": precio,
+            "subtotal": subtotal,
+            "promo_id": promo["id"],
+        })
 
     return items
 
 
+def _armar_items_flexibles(productos, promos_flexibles):
+    items = []
 
-def _registrar_pago_pendiente(db, pedido, forma_pago):
-    """
-    Registra el pago de un pedido que había quedado pendiente.
-    Actualiza el pedido y crea el ingreso en caja.
-    """
-    total = _float(pedido.get("total"))
+    for promo in promos_flexibles:
+        promo_id = promo["id"]
+        requerido = _float(promo.get("cantidad_requerida"))
+        seleccionado = _flex_total_seleccionado(promo_id)
 
-    db.table(table("pedidos")).update({
-        "pagado": True,
-        "tipo_cobro": "Cobrado",
+        if seleccionado <= 0 or seleccionado != requerido:
+            continue
+
+        detalle = []
+        for p in _productos_para_promo_flexible(productos, promo):
+            cant = _get_flex_qty(promo_id, p["id"])
+            if cant > 0:
+                detalle.append({
+                    "producto_id": p["id"],
+                    "producto_nombre": p.get("nombre"),
+                    "cantidad": cant,
+                })
+
+        precio = _float(promo.get("precio"))
+
+        items.append({
+            "producto_id": None,
+            "producto_nombre": promo.get("nombre"),
+            "cantidad": 1,
+            "precio_unitario": precio,
+            "subtotal": precio,
+            "promo_flexible_id": promo_id,
+            "promo_flexible_nombre": promo.get("nombre"),
+            "detalle_flexible": detalle,
+        })
+
+    return items
+
+
+def _armar_items_combinados(productos, promos_combinadas, grupos_por_promo):
+    items = []
+
+    for promo in promos_combinadas:
+        promo_id = promo["id"]
+        grupos = grupos_por_promo.get(promo_id, [])
+
+        if not grupos:
+            continue
+
+        completa = True
+        detalle = []
+
+        for grupo in grupos:
+            grupo_id = grupo["id"]
+            requerido = _float(grupo.get("cantidad_requerida"))
+            seleccionado = _combo_total_grupo(promo_id, grupo_id)
+
+            if seleccionado != requerido:
+                completa = False
+                break
+
+            for p in _productos_para_grupo_combinado(productos, grupo):
+                cant = _get_combo_qty(promo_id, grupo_id, p["id"])
+                if cant > 0:
+                    detalle.append({
+                        "grupo_id": grupo_id,
+                        "familia": grupo.get("familia"),
+                        "producto_id": p["id"],
+                        "producto_nombre": p.get("nombre"),
+                        "cantidad": cant,
+                    })
+
+        if not completa:
+            continue
+
+        precio = _float(promo.get("precio"))
+
+        items.append({
+            "producto_id": None,
+            "producto_nombre": promo.get("nombre"),
+            "cantidad": 1,
+            "precio_unitario": precio,
+            "subtotal": precio,
+            "promo_combinada_id": promo_id,
+            "promo_combinada_nombre": promo.get("nombre"),
+            "detalle_combinada": detalle,
+        })
+
+    return items
+
+
+def _render_controles_producto(producto_id, widget_key):
+    c1, c2, c3 = st.columns([1, 1, 1])
+    if c1.button("−", key=f"menos_{widget_key}"):
+        _set_cantidad(producto_id, max(0, _get_cantidad(producto_id) - 1))
+        st.rerun()
+
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = _get_cantidad(producto_id)
+
+    c2.number_input(
+        "Cant.",
+        min_value=0.0,
+        step=1.0,
+        key=widget_key,
+        label_visibility="collapsed",
+        on_change=_sync_cantidad_widget,
+        args=(producto_id, widget_key),
+    )
+
+    if c3.button("➕", key=f"mas_{widget_key}"):
+        _set_cantidad(producto_id, _get_cantidad(producto_id) + 1)
+        st.rerun()
+
+
+def _guardar_pedido(db, pedido, items):
+    detalles_para_insertar = []
+    flex_items_para_insertar = []
+    combo_items_para_insertar = []
+
+    for it in items:
+        it_db = dict(it)
+        detalle_flexible = it_db.pop("detalle_flexible", None)
+        detalle_combinada = it_db.pop("detalle_combinada", None)
+
+        it_db["pedido_id"] = pedido["id"]
+        detalles_para_insertar.append(it_db)
+
+        if detalle_flexible and it.get("promo_flexible_id"):
+            for det in detalle_flexible:
+                flex_items_para_insertar.append({
+                    "pedido_id": pedido["id"],
+                    "promo_flexible_id": it.get("promo_flexible_id"),
+                    "producto_id": det.get("producto_id"),
+                    "producto_nombre": det.get("producto_nombre"),
+                    "cantidad": det.get("cantidad"),
+                })
+
+        if detalle_combinada and it.get("promo_combinada_id"):
+            for det in detalle_combinada:
+                combo_items_para_insertar.append({
+                    "pedido_id": pedido["id"],
+                    "promo_combinada_id": it.get("promo_combinada_id"),
+                    "grupo_id": det.get("grupo_id"),
+                    "familia": det.get("familia"),
+                    "producto_id": det.get("producto_id"),
+                    "producto_nombre": det.get("producto_nombre"),
+                    "cantidad": det.get("cantidad"),
+                })
+
+    if detalles_para_insertar:
+        db.table(table("pedido_detalles")).insert(detalles_para_insertar).execute()
+
+    if flex_items_para_insertar:
+        db.table("namnam_pedido_promo_flexible_items").insert(flex_items_para_insertar).execute()
+
+    if combo_items_para_insertar:
+        db.table("namnam_pedido_promo_combinada_items").insert(combo_items_para_insertar).execute()
+
+
+def _actualizar_pedido_admin(db, pedido_id, cliente_id, cliente_nombre, tipo_cliente, estado, forma_pago, tipo_cobro, observaciones):
+    update_data = {
+        "cliente_id": cliente_id,
+        "cliente_nombre": cliente_nombre,
+        "estado": estado,
         "forma_pago": forma_pago,
-        "fecha_pago": datetime.now().isoformat(),
-    }).eq("id", pedido["id"]).execute()
+        "tipo_cobro": tipo_cobro,
+        "observaciones": observaciones,
+        "tipo_cliente": tipo_cliente,
+    }
 
-    db.table(table("caja")).insert({
-        "tipo": "Ingreso",
-        "concepto": f"Cobro pedido #{pedido['id']}",
-        "importe": total,
-        "observaciones": f"Cliente: {pedido.get('cliente_nombre') or ''}",
-        "pedido_id": pedido["id"],
-        "cliente_id": pedido.get("cliente_id"),
-        "forma_pago": forma_pago,
-        "medio": forma_pago,
-    }).execute()
+    try:
+        db.table(table("pedidos")).update(update_data).eq("id", pedido_id).execute()
+    except Exception:
+        update_data.pop("tipo_cliente", None)
+        db.table(table("pedidos")).update(update_data).eq("id", pedido_id).execute()
+
 
 def render():
-    header("📝 Pedidos", "Crear pedido por familias, promos, cobrar o descontar saldo mayorista")
+    header("📝 Pedidos", "Crear pedido por familias, promos y precios minorista/mayorista")
     db = require_db()
     _init_pedido_cantidades()
 
-    productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
-    clientes = [c for c in fetch_table("clientes", "id") if c.get("activo")]
-    try:
-        promos = (
-            db.table("namnam_promos")
-            .select("*")
-            .eq("activo", True)
-            .order("id")
-            .execute()
-            .data
-            or []
-        )
-    except Exception as e:
-        st.warning("No pude leer promociones. El pedido puede continuar solo con productos.")
-        promos = []
+    productos = [p for p in fetch_table("productos") if p.get("activo")]
+    clientes = [c for c in fetch_table("clientes") if c.get("activo")]
+    promos = _leer_promos(db)
+    promos_flexibles = _leer_promos_flexibles(db)
+    promos_combinadas = _leer_promos_combinadas(db)
+    grupos_combinadas = {
+        promo["id"]: _leer_grupos_promo_combinada(db, promo["id"])
+        for promo in promos_combinadas
+    }
 
     st.subheader("➕ Crear pedido")
 
-    cliente_opciones = {_nombre_cliente(c): c for c in clientes}
+    if not productos and not promos and not promos_flexibles and not promos_combinadas:
+        st.warning("Primero cargá productos o promociones.")
+    else:
+        cliente_opciones = {_nombre_cliente(c): c for c in clientes}
 
-    cliente_txt = st.selectbox(
-        "Cliente",
-        ["Venta mostrador / Consumidor Final"] + list(cliente_opciones.keys())
-    )
+        c_cliente, c_tipo = st.columns([2, 1])
 
-    cliente = None
-    cliente_id = None
-    cliente_nombre = "Venta mostrador"
+        cliente_txt = c_cliente.selectbox(
+            "Cliente",
+            ["Venta mostrador / Consumidor Final"] + list(cliente_opciones.keys())
+        )
 
-    if cliente_txt != "Venta mostrador / Consumidor Final":
-        cliente = cliente_opciones[cliente_txt]
-        cliente_id = cliente["id"]
-        cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
-
-    cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
-
-    if cliente_manual.strip():
-        cliente_nombre = cliente_manual.strip()
-        cliente_id = None
         cliente = None
+        cliente_id = None
+        cliente_nombre = "Venta mostrador"
 
-    obs = st.text_area("Observaciones")
-    tipo_cliente = (cliente or {}).get("tipo_cliente") or "Minorista"
+        if cliente_txt != "Venta mostrador / Consumidor Final":
+            cliente = cliente_opciones[cliente_txt]
+            cliente_id = cliente["id"]
+            cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
 
-    tab_productos, tab_promos = st.tabs(["📦 Productos", "🏷️ Promociones"])
+        tipo_default = (cliente or {}).get("tipo_cliente") or "Minorista"
+        tipo_index = 1 if tipo_default == "Mayorista" else 0
 
-    items_productos = []
-    resumen_familias = []
+        tipo_venta = c_tipo.radio(
+            "Tipo de venta",
+            ["Minorista", "Mayorista"],
+            index=tipo_index,
+            horizontal=True,
+            help="Define qué precio se usa en este pedido.",
+        )
 
-    with tab_productos:
-        if not productos:
-            st.warning("Primero cargá productos.")
-        else:
-            familias = {}
-            for p in productos:
-                familia = _familia_producto(p)
-                familias.setdefault(familia, []).append(p)
+        cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
 
-            familias_ordenadas = _ordenar_familias(familias)
-            items_productos, resumen_familias = _resumen_items(familias_ordenadas, familias, cliente)
+        if cliente_manual.strip():
+            cliente_nombre = cliente_manual.strip()
+            cliente_id = None
+            cliente = None
 
+        obs = st.text_area("Observaciones")
+
+        familias = {}
+        for p in productos:
+            familia = _familia_producto(p)
+            familias.setdefault(familia, []).append(p)
+
+        familias_ordenadas = _ordenar_familias(familias) if familias else []
+        items_productos, resumen_familias = _resumen_items(familias_ordenadas, familias, tipo_venta)
+        items_promos_fijas = _armar_items_promos_fijas(promos)
+        items_flexibles = _armar_items_flexibles(productos, promos_flexibles)
+        items_combinados = _armar_items_combinados(productos, promos_combinadas, grupos_combinadas)
+
+        items = items_productos + items_promos_fijas + items_flexibles + items_combinados
+        total = sum(i["subtotal"] for i in items)
+
+        tab_prod, tab_promos, tab_flex, tab_combo, tab_resumen = st.tabs([
+            "📦 Productos",
+            "🏷️ Promos fijas",
+            "🧺 Flexibles",
+            "🧩 Combinadas",
+            "🧾 Resumen",
+        ])
+
+        with tab_prod:
             st.markdown("### 🧾 Productos por familia")
 
-            if "familia_actual_pedido" not in st.session_state:
-                st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
+            if not familias_ordenadas:
+                st.info("No hay productos cargados.")
+            else:
+                if "familia_actual_pedido" not in st.session_state:
+                    st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
 
-            if st.session_state["familia_actual_pedido"] not in familias_ordenadas:
-                st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
+                if st.session_state["familia_actual_pedido"] not in familias_ordenadas:
+                    st.session_state["familia_actual_pedido"] = familias_ordenadas[0]
 
-            labels_radio = [f"{_emoji_familia(f)} {f}" for f in familias_ordenadas]
-            label_to_family = {f"{_emoji_familia(f)} {f}": f for f in familias_ordenadas}
+                labels_radio = [f"{_emoji_familia(f)} {f}" for f in familias_ordenadas]
+                label_to_family = {f"{_emoji_familia(f)} {f}": f for f in familias_ordenadas}
 
-            current_family = st.session_state["familia_actual_pedido"]
-            current_label = f"{_emoji_familia(current_family)} {current_family}"
-            current_index = labels_radio.index(current_label) if current_label in labels_radio else 0
+                current_family = st.session_state["familia_actual_pedido"]
+                current_label = f"{_emoji_familia(current_family)} {current_family}"
+                current_index = labels_radio.index(current_label) if current_label in labels_radio else 0
 
-            selected_label = st.radio(
-                "Familia",
-                labels_radio,
-                index=current_index,
-                horizontal=True,
-                key="radio_familia_pedido_estable"
-            )
-
-            familia_actual = label_to_family[selected_label]
-            st.session_state["familia_actual_pedido"] = familia_actual
-
-            resumen_actual = next(
-                (r for r in resumen_familias if r["familia"] == familia_actual),
-                {"subtotal": 0, "unidades": 0}
-            )
-
-            st.markdown(f"### {_emoji_familia(familia_actual)} {familia_actual}")
-
-            c_fam1, c_fam2 = st.columns(2)
-            c_fam1.metric("Cantidad en familia", f"{resumen_actual['unidades']:g}")
-            c_fam2.metric("Subtotal familia", money(resumen_actual["subtotal"]))
-
-            st.divider()
-
-            productos_familia = familias[familia_actual]
-
-            for p in productos_familia:
-                c1, c2, c3 = st.columns([4, 1, 1])
-
-                unidad = p.get("unidad") or "unidad"
-                precio = _precio_para_cliente(p, cliente)
-                producto_id = p["id"]
-                widget_key = f"cant_widget_{producto_id}"
-
-                if widget_key not in st.session_state:
-                    st.session_state[widget_key] = _get_cantidad(producto_id)
-
-                c1.write(f"**{p['nombre']}**")
-                c1.caption(f"{money(precio)} / {unidad}")
-
-                cant = c2.number_input(
-                    "Cant.",
-                    min_value=0.0,
-                    step=1.0,
-                    key=widget_key,
-                    on_change=_sync_cantidad_widget,
-                    args=(producto_id, widget_key),
+                selected_label = st.radio(
+                    "Familia",
+                    labels_radio,
+                    index=current_index,
+                    horizontal=True,
+                    key="radio_familia_pedido_estable"
                 )
 
-                subtotal = _float(cant) * precio
-                c3.write("Subtotal")
-                c3.markdown(f"**{money(subtotal)}**")
+                familia_actual = label_to_family[selected_label]
+                st.session_state["familia_actual_pedido"] = familia_actual
 
-            items_productos, resumen_familias = _resumen_items(familias_ordenadas, familias, cliente)
+                resumen_actual = next(
+                    (r for r in resumen_familias if r["familia"] == familia_actual),
+                    {"subtotal": 0, "unidades": 0}
+                )
 
-    with tab_promos:
-        st.markdown("### 🏷️ Promociones disponibles")
+                st.markdown(f"### {_emoji_familia(familia_actual)} {familia_actual}")
 
-        if not promos:
-            st.info("Todavía no hay promociones activas.")
-        else:
-            for promo in promos:
-                with st.container(border=True):
+                c_fam1, c_fam2 = st.columns(2)
+                c_fam1.metric("Cantidad en familia", f"{resumen_actual['unidades']:g}")
+                c_fam2.metric("Subtotal familia", money(resumen_actual["subtotal"]))
+
+                st.divider()
+
+                for p in familias[familia_actual]:
                     c1, c2, c3 = st.columns([4, 1, 1])
 
-                    promo_id = promo["id"]
-                    widget_key = f"promo_widget_{promo_id}"
+                    unidad = p.get("unidad") or "unidad"
+                    precio_usado = _precio_para_tipo(p, tipo_venta)
+                    precio_min = _float(p.get("precio_venta"))
+                    precio_may = _precio_mayorista(p)
+                    producto_id = p["id"]
+                    widget_key = f"cant_widget_{producto_id}"
+
+                    c1.write(f"**{p['nombre']}**")
+                    c1.caption(
+                        f"Minorista: {money(precio_min)} · Mayorista: {money(precio_may)} · Usando: {money(precio_usado)} / {unidad}"
+                    )
 
                     if widget_key not in st.session_state:
-                        st.session_state[widget_key] = _get_promo_cantidad(promo_id)
+                        st.session_state[widget_key] = _get_cantidad(producto_id)
 
-                    c1.markdown(f"### 🏷️ {promo.get('nombre')}")
-                    if promo.get("descripcion"):
-                        c1.caption(promo.get("descripcion"))
-
-                    productos_por_id = _productos_por_id(productos)
-                    precio_promo_cliente = _precio_promo_para_cliente(db, promo, cliente, productos_por_id)
-
-                    if tipo_cliente == "Mayorista":
-                        c2.markdown("Precio mayorista")
-                    else:
-                        c2.markdown("Precio promo")
-
-                    c2.markdown(f"## {money(precio_promo_cliente)}")
-
-                    cant = c3.number_input(
+                    cant = c2.number_input(
                         "Cant.",
                         min_value=0.0,
                         step=1.0,
                         key=widget_key,
-                        on_change=_sync_promo_widget,
-                        args=(promo_id, widget_key),
+                        on_change=_sync_cantidad_widget,
+                        args=(producto_id, widget_key),
                     )
 
-                    if cant > 0:
-                        c3.success(f"Subtotal: {money(_float(cant) * precio_promo_cliente)}")
+                    subtotal = _float(cant) * precio_usado
+                    c3.write("Subtotal")
+                    c3.markdown(f"**{money(subtotal)}**")
 
-                    detalles = (
-                        db.table("namnam_promos_detalle")
-                        .select("*")
-                        .eq("promo_id", promo_id)
-                        .execute()
-                        .data
-                        or []
-                    )
+        with tab_promos:
+            st.markdown("### 🏷️ Promos fijas")
 
-                    if detalles:
-                        with st.expander("Ver productos incluidos"):
-                            st.dataframe(
-                                pd.DataFrame([
-                                    {
-                                        "Producto": d.get("producto_nombre"),
-                                        "Cantidad": d.get("cantidad"),
-                                    }
-                                    for d in detalles
-                                ]),
-                                use_container_width=True,
-                                hide_index=True
-                            )
-
-    items_promos = _resumen_promos(db, promos, cliente, productos)
-    items = items_productos + items_promos
-    total = sum(i["subtotal"] for i in items)
-
-    st.divider()
-
-    ctot1, ctot2 = st.columns([2, 1])
-    with ctot1:
-        st.markdown("### 📋 Resumen del pedido")
-
-        resumen_df = []
-
-        for r in resumen_familias:
-            if r["subtotal"] > 0:
-                resumen_df.append({
-                    "Tipo": "Producto",
-                    "Detalle": f"{_emoji_familia(r['familia'])} {r['familia']}",
-                    "Cantidad": r["unidades"],
-                    "Subtotal": money(r["subtotal"]),
-                })
-
-        for promo_item in items_promos:
-            resumen_df.append({
-                "Tipo": "Promo",
-                "Detalle": f"🏷️ {promo_item['producto_nombre']}",
-                "Cantidad": promo_item["cantidad"],
-                "Subtotal": money(promo_item["subtotal"]),
-            })
-
-        if resumen_df:
-            st.dataframe(pd.DataFrame(resumen_df), use_container_width=True, hide_index=True)
-        else:
-            st.info("Todavía no cargaste productos ni promos.")
-
-    with ctot2:
-        st.markdown("### 🧮 Total pedido")
-        st.markdown(f"# {money(total)}")
-
-    if tipo_cliente == "Mayorista":
-        forma_cobro = st.radio("Cobro", FORMAS_MAYORISTA, horizontal=True)
-
-        if forma_cobro == "Cobrar ahora":
-            forma_pago = st.selectbox(
-                "Forma de pago",
-                ["Efectivo", "Transferencia", "Mercado Pago"]
-            )
-        else:
-            forma_pago = "Saldo mayorista"
-            saldo = _float(cliente.get("saldo_cuenta_corriente") if cliente else 0)
-            disponible_final = saldo - total
-
-            if disponible_final < 0:
-                st.error(f"⚠ Este pedido deja deuda de {money(abs(disponible_final))}")
+            if not promos:
+                st.info("No hay promos fijas activas.")
             else:
-                st.success(f"Saldo luego del pedido: {money(disponible_final)}")
-    else:
-        forma_pago = st.selectbox("Forma de pago", FORMAS_MINORISTA)
-        forma_cobro = "Cobrado" if forma_pago != "Pendiente" else "Pendiente"
+                for promo in promos:
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([4, 1, 1])
+                        c1.markdown(f"**{promo.get('nombre')}**")
+                        c1.caption(promo.get("descripcion") or "")
+                        c1.write(f"Precio: **{money(promo.get('precio'))}**")
 
-    col_guardar, col_limpiar = st.columns([1, 1])
+                        detalles = _leer_detalle_promo(db, promo["id"])
+                        if detalles:
+                            with c1.expander("Ver productos incluidos"):
+                                st.dataframe(pd.DataFrame(detalles), use_container_width=True, hide_index=True)
 
-    with col_guardar:
-        guardar = st.button("Guardar pedido")
+                        widget_key = f"promo_widget_{promo['id']}"
+                        if widget_key not in st.session_state:
+                            st.session_state[widget_key] = _get_promo_qty(promo["id"])
 
-    with col_limpiar:
-        limpiar = st.button("Limpiar cantidades")
+                        cant = c2.number_input(
+                            "Cant.",
+                            min_value=0.0,
+                            step=1.0,
+                            key=widget_key,
+                            on_change=_sync_promo_widget,
+                            args=(promo["id"], widget_key),
+                        )
 
-    if limpiar:
-        _limpiar_pedido()
-        st.rerun()
+                        c3.write("Subtotal")
+                        c3.markdown(f"**{money(_float(cant) * _float(promo.get('precio')))}**")
 
-    if guardar:
-        if not items:
-            st.warning("Agregá al menos un producto o una promo.")
-        else:
-            tipo_cobro = "Pendiente"
-            pagado = False
+        with tab_flex:
+            st.markdown("### 🧺 Promos flexibles")
 
-            if tipo_cliente == "Mayorista" and forma_cobro == "Usar saldo mayorista":
-                tipo_cobro = "Cuenta corriente"
-                pagado = True
-            elif forma_pago != "Pendiente":
-                tipo_cobro = "Cobrado"
-                pagado = True
+            if not promos_flexibles:
+                st.info("No hay promos flexibles activas.")
+            else:
+                for promo_flex in promos_flexibles:
+                    with st.container(border=True):
+                        promo_id = promo_flex["id"]
+                        requerido = _float(promo_flex.get("cantidad_requerida"))
+                        seleccionado = _flex_total_seleccionado(promo_id)
+                        faltan = max(0, requerido - seleccionado)
 
-            pedido = db.table(table("pedidos")).insert({
-                "cliente_id": cliente_id,
-                "cliente_nombre": cliente_nombre,
-                "estado": "Pendiente",
-                "total": total,
-                "observaciones": obs,
-                "pagado": pagado,
-                "forma_pago": forma_pago,
-                "tipo_cobro": tipo_cobro,
-            }).execute().data[0]
+                        st.markdown(f"### 🧺 {promo_flex.get('nombre')}")
+                        if promo_flex.get("descripcion"):
+                            st.caption(promo_flex.get("descripcion"))
+                        st.write(f"Elegidas: **{seleccionado:g} / {requerido:g}** · Precio: **{money(promo_flex.get('precio'))}**")
 
-            for it in items:
-                it["pedido_id"] = pedido["id"]
+                        if faltan > 0:
+                            st.warning(f"Faltan elegir {faltan:g}.")
+                        elif seleccionado > requerido:
+                            st.error(f"Te pasaste por {seleccionado - requerido:g}. Bajá cantidades.")
+                        else:
+                            st.success("Promo completa. Se suma al pedido.")
 
-            db.table(table("pedido_detalles")).insert(items).execute()
+                        productos_flex = _productos_para_promo_flexible(productos, promo_flex)
 
-            if tipo_cobro == "Cobrado":
-                _registrar_caja(db, pedido, forma_pago)
+                        if not productos_flex:
+                            st.info("No hay productos disponibles para esta promo.")
+                        else:
+                            for p in productos_flex:
+                                qty = int(_get_flex_qty(promo_id, p["id"]))
+                                total_actual = _flex_total_seleccionado(promo_id)
+                                max_manual = int(qty + max(0, requerido - total_actual))
+                                bloqueado = total_actual >= requerido and qty <= 0
 
-            if tipo_cobro == "Cuenta corriente":
-                _usar_saldo_mayorista(db, pedido)
+                                c1, c2, c3 = st.columns([4, 1, 1])
+                                c1.write(f"**{p.get('nombre')}**")
+                                c1.caption(f"{p.get('unidad') or 'unidad'} · incluido en promo")
 
+                                widget_key = f"flex_widget_{promo_id}_{p['id']}"
+                                if widget_key not in st.session_state:
+                                    st.session_state[widget_key] = qty
+
+                                c2.number_input(
+                                    "Cant.",
+                                    min_value=0,
+                                    max_value=max(0, max_manual),
+                                    step=1,
+                                    key=widget_key,
+                                    disabled=bloqueado,
+                                    on_change=_sync_flex_widget,
+                                    args=(promo_id, p["id"], widget_key),
+                                )
+
+                                if c3.button("🗑️", key=f"flex_del_{promo_id}_{p['id']}"):
+                                    _set_flex_qty(promo_id, p["id"], 0)
+                                    if widget_key in st.session_state:
+                                        st.session_state[widget_key] = 0
+                                    st.rerun()
+
+        with tab_combo:
+            st.markdown("### 🧩 Promos combinadas")
+
+            if not promos_combinadas:
+                st.info("No hay promos combinadas activas.")
+            else:
+                for promo_combo in promos_combinadas:
+                    promo_id = promo_combo["id"]
+                    grupos = grupos_combinadas.get(promo_id, [])
+
+                    with st.container(border=True):
+                        st.markdown(f"### 🧩 {promo_combo.get('nombre')}")
+                        if promo_combo.get("descripcion"):
+                            st.caption(promo_combo.get("descripcion"))
+                        st.write(f"Precio promo: **{money(promo_combo.get('precio'))}**")
+
+                        completa = True
+
+                        for grupo in grupos:
+                            grupo_id = grupo["id"]
+                            requerido = _float(grupo.get("cantidad_requerida"))
+                            seleccionado = _combo_total_grupo(promo_id, grupo_id)
+
+                            if seleccionado != requerido:
+                                completa = False
+
+                            with st.expander(f"{grupo.get('familia')} — {seleccionado:g} / {requerido:g}", expanded=True):
+                                if seleccionado < requerido:
+                                    st.warning(f"Faltan elegir {requerido - seleccionado:g}.")
+                                elif seleccionado > requerido:
+                                    st.error(f"Te pasaste por {seleccionado - requerido:g}.")
+                                else:
+                                    st.success("Grupo completo.")
+
+                                productos_grupo = _productos_para_grupo_combinado(productos, grupo)
+
+                                if not productos_grupo:
+                                    st.info("No hay productos para este grupo.")
+                                else:
+                                    for p in productos_grupo:
+                                        qty = int(_get_combo_qty(promo_id, grupo_id, p["id"]))
+                                        total_grupo = _combo_total_grupo(promo_id, grupo_id)
+                                        max_manual = int(qty + max(0, requerido - total_grupo))
+                                        bloqueado = total_grupo >= requerido and qty <= 0
+
+                                        c1, c2, c3 = st.columns([4, 1, 1])
+                                        c1.write(f"**{p.get('nombre')}**")
+                                        c1.caption(f"{p.get('unidad') or 'unidad'} · grupo {grupo.get('familia')}")
+
+                                        widget_key = f"combo_widget_{promo_id}_{grupo_id}_{p['id']}"
+                                        if widget_key not in st.session_state:
+                                            st.session_state[widget_key] = qty
+
+                                        c2.number_input(
+                                            "Cant.",
+                                            min_value=0,
+                                            max_value=max(0, max_manual),
+                                            step=1,
+                                            key=widget_key,
+                                            disabled=bloqueado,
+                                            on_change=_sync_combo_widget,
+                                            args=(promo_id, grupo_id, p["id"], widget_key),
+                                        )
+
+                                        if c3.button("🗑️", key=f"combo_del_{promo_id}_{grupo_id}_{p['id']}"):
+                                            _set_combo_qty(promo_id, grupo_id, p["id"], 0)
+                                            if widget_key in st.session_state:
+                                                st.session_state[widget_key] = 0
+                                            st.rerun()
+
+                        if completa and grupos:
+                            st.success("Promo combinada completa. Se suma al pedido.")
+                        else:
+                            st.info("Completá todos los grupos para sumar la promo.")
+
+        with tab_resumen:
+            st.markdown("### 📋 Resumen del pedido")
+
+            if items:
+                st.dataframe(
+                    pd.DataFrame([
+                        {
+                            "Detalle": i.get("producto_nombre"),
+                            "Cantidad": i.get("cantidad"),
+                            "Precio": money(i.get("precio_unitario")),
+                            "Subtotal": money(i.get("subtotal")),
+                        }
+                        for i in items
+                    ]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+            else:
+                st.info("Todavía no cargaste productos ni promos.")
+
+            st.markdown(f"## Total: {money(total)}")
+
+        # recalcular después de tabs
+        items_productos, resumen_familias = _resumen_items(familias_ordenadas, familias, tipo_venta)
+        items_promos_fijas = _armar_items_promos_fijas(promos)
+        items_flexibles = _armar_items_flexibles(productos, promos_flexibles)
+        items_combinados = _armar_items_combinados(productos, promos_combinadas, grupos_combinadas)
+        items = items_productos + items_promos_fijas + items_flexibles + items_combinados
+        total = sum(i["subtotal"] for i in items)
+
+        st.divider()
+        ctot1, ctot2 = st.columns([2, 1])
+
+        with ctot1:
+            st.markdown("### 🧮 Total pedido")
+            st.markdown(f"# {money(total)}")
+            st.caption(f"Tipo de venta: {tipo_venta}")
+
+        with ctot2:
+            if tipo_venta == "Mayorista":
+                forma_cobro = st.radio("Cobro", FORMAS_MAYORISTA, horizontal=False)
+
+                if forma_cobro == "Cobrar ahora":
+                    forma_pago = st.selectbox("Forma de pago", ["Efectivo", "Transferencia", "Mercado Pago"])
+                else:
+                    forma_pago = "Saldo mayorista"
+                    saldo = _float(cliente.get("saldo_cuenta_corriente") if cliente else 0)
+                    disponible_final = saldo - total
+
+                    if disponible_final < 0:
+                        st.error(f"⚠ Este pedido deja deuda de {money(abs(disponible_final))}")
+                    else:
+                        st.success(f"Saldo luego del pedido: {money(disponible_final)}")
+            else:
+                forma_pago = st.selectbox("Forma de pago", FORMAS_MINORISTA)
+                forma_cobro = "Cobrado" if forma_pago != "Pendiente" else "Pendiente"
+
+        col_guardar, col_limpiar = st.columns([1, 1])
+
+        with col_guardar:
+            guardar = st.button("Guardar pedido")
+
+        with col_limpiar:
+            limpiar = st.button("Limpiar cantidades")
+
+        if limpiar:
             _limpiar_pedido()
-            st.success("Pedido guardado.")
             st.rerun()
 
+        if guardar:
+            # Validaciones de promos incompletas
+            for promo_flex in promos_flexibles:
+                seleccionado = _flex_total_seleccionado(promo_flex["id"])
+                requerido = _float(promo_flex.get("cantidad_requerida"))
+
+                if seleccionado > 0 and seleccionado != requerido:
+                    st.warning(
+                        f"La promo '{promo_flex.get('nombre')}' necesita exactamente {requerido:g} unidades. Ahora tiene {seleccionado:g}."
+                    )
+                    return
+
+            for promo_combo in promos_combinadas:
+                for grupo in grupos_combinadas.get(promo_combo["id"], []):
+                    seleccionado = _combo_total_grupo(promo_combo["id"], grupo["id"])
+                    requerido = _float(grupo.get("cantidad_requerida"))
+
+                    if seleccionado > 0 and seleccionado != requerido:
+                        st.warning(
+                            f"La promo '{promo_combo.get('nombre')}' necesita exactamente {requerido:g} de {grupo.get('familia')}. Ahora tiene {seleccionado:g}."
+                        )
+                        return
+
+            if not items:
+                st.warning("Agregá al menos un producto o promo.")
+            else:
+                tipo_cobro = "Pendiente"
+                pagado = False
+
+                if tipo_venta == "Mayorista" and forma_cobro == "Usar saldo mayorista":
+                    tipo_cobro = "Cuenta corriente"
+                    pagado = True
+                elif forma_pago != "Pendiente":
+                    tipo_cobro = "Cobrado"
+                    pagado = True
+
+                insert_pedido = {
+                    "cliente_id": cliente_id,
+                    "cliente_nombre": cliente_nombre,
+                    "estado": "Pendiente",
+                    "total": total,
+                    "observaciones": obs,
+                    "pagado": pagado,
+                    "forma_pago": forma_pago,
+                    "tipo_cobro": tipo_cobro,
+                    "tipo_cliente": tipo_venta,
+                }
+
+                try:
+                    pedido = db.table(table("pedidos")).insert(insert_pedido).execute().data[0]
+                except Exception:
+                    insert_pedido.pop("tipo_cliente", None)
+                    pedido = db.table(table("pedidos")).insert(insert_pedido).execute().data[0]
+
+                _guardar_pedido(db, pedido, items)
+
+                if tipo_cobro == "Cobrado":
+                    _registrar_caja(db, pedido, forma_pago)
+
+                if tipo_cobro == "Cuenta corriente":
+                    _usar_saldo_mayorista(db, pedido)
+
+                _limpiar_pedido()
+                st.success("Pedido guardado.")
+                st.rerun()
+
     st.divider()
-    st.caption("Versión pedidos: registrar pago pendiente activo")
     st.subheader("Pedidos")
     pedidos = fetch_table("pedidos", "fecha")
 
@@ -644,13 +1091,18 @@ def render():
         st.info("Todavía no hay pedidos.")
         return
 
+    cliente_opciones_lista = ["Sin cliente / Mostrador"] + [_nombre_cliente(c) for c in clientes]
+    cliente_por_label = {_nombre_cliente(c): c for c in clientes}
+
     for p in reversed(pedidos):
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([1, 3, 2, 2])
 
             c1.markdown(f"### #{p['id']}")
             c2.write(f"**Cliente:** {p.get('cliente_nombre') or 'Sin cliente'}")
-            c2.caption(f"Cobro: {p.get('tipo_cobro') or 'Pendiente'} · {p.get('forma_pago') or '-'}")
+            c2.caption(
+                f"Tipo: {p.get('tipo_cliente') or '-'} · Cobro: {p.get('tipo_cobro') or 'Pendiente'} · {p.get('forma_pago') or '-'}"
+            )
 
             estado_actual = p.get("estado") if p.get("estado") in ESTADOS else "Pendiente"
 
@@ -664,40 +1116,100 @@ def render():
             c4.markdown(f"### {money(p.get('total'))}")
 
             if p.get("tipo_cobro") == "Cobrado":
-                c4.success(f"Pagado · {p.get('forma_pago') or '-'}")
+                c4.success("Pagado")
             elif p.get("tipo_cobro") == "Cuenta corriente":
                 c4.warning("Descontado de saldo")
             else:
-                c4.info("Pendiente de cobro")
+                c4.info("Pendiente")
 
-            col_estado, col_pago = st.columns([1, 2])
+            if st.button("Actualizar estado", key=f"up{p['id']}"):
+                db.table(table("pedidos")).update({
+                    "estado": nuevo_estado
+                }).eq("id", p["id"]).execute()
 
-            with col_estado:
-                if st.button("Actualizar estado", key=f"up{p['id']}"):
-                    db.table(table("pedidos")).update({
-                        "estado": nuevo_estado
-                    }).eq("id", p["id"]).execute()
+                st.success("Estado actualizado.")
+                st.rerun()
 
-                    st.success("Estado actualizado.")
-                    st.rerun()
+            with st.expander("✏️ Editar datos del pedido"):
+                cliente_actual_label = "Sin cliente / Mostrador"
+                for label, cli in cliente_por_label.items():
+                    if cli.get("id") == p.get("cliente_id"):
+                        cliente_actual_label = label
+                        break
 
-            with col_pago:
-                if (p.get("tipo_cobro") or "Pendiente") == "Pendiente":
-                    st.markdown("**Registrar pago**")
-                    forma_pago_pendiente = st.selectbox(
-                        "Forma de pago",
-                        ["Efectivo", "Transferencia", "Mercado Pago"],
-                        key=f"pago_pendiente_{p['id']}"
+                cedit1, cedit2 = st.columns([2, 1])
+                cliente_edit = cedit1.selectbox(
+                    "Cliente",
+                    cliente_opciones_lista,
+                    index=cliente_opciones_lista.index(cliente_actual_label) if cliente_actual_label in cliente_opciones_lista else 0,
+                    key=f"pedido_cliente_edit_{p['id']}",
+                )
+
+                tipo_edit = cedit2.radio(
+                    "Tipo",
+                    ["Minorista", "Mayorista"],
+                    index=1 if p.get("tipo_cliente") == "Mayorista" else 0,
+                    horizontal=True,
+                    key=f"pedido_tipo_edit_{p['id']}",
+                )
+
+                if cliente_edit == "Sin cliente / Mostrador":
+                    cliente_id_edit = None
+                    cliente_nombre_edit = st.text_input(
+                        "Nombre cliente",
+                        value=p.get("cliente_nombre") or "Venta mostrador",
+                        key=f"pedido_cliente_nombre_edit_{p['id']}",
                     )
+                else:
+                    cli = cliente_por_label[cliente_edit]
+                    cliente_id_edit = cli.get("id")
+                    cliente_nombre_edit = _nombre_cliente(cli).split(" - ")[0]
+                    st.caption(f"Cliente seleccionado: {cliente_nombre_edit}")
 
-                    if st.button("💰 Registrar pago", key=f"registrar_pago_{p['id']}"):
-                        _registrar_pago_pendiente(db, p, forma_pago_pendiente)
-                        st.success("Pago registrado y caja actualizada.")
-                        st.rerun()
+                cedit3, cedit4 = st.columns(2)
+                forma_pago_edit = cedit3.selectbox(
+                    "Forma de pago",
+                    ["Efectivo", "Transferencia", "Mercado Pago", "Pendiente", "Saldo mayorista"],
+                    index=0 if not p.get("forma_pago") else (
+                        ["Efectivo", "Transferencia", "Mercado Pago", "Pendiente", "Saldo mayorista"].index(p.get("forma_pago"))
+                        if p.get("forma_pago") in ["Efectivo", "Transferencia", "Mercado Pago", "Pendiente", "Saldo mayorista"]
+                        else 0
+                    ),
+                    key=f"pedido_forma_edit_{p['id']}",
+                )
+
+                tipo_cobro_edit = cedit4.selectbox(
+                    "Tipo de cobro",
+                    ["Pendiente", "Cobrado", "Cuenta corriente"],
+                    index=["Pendiente", "Cobrado", "Cuenta corriente"].index(p.get("tipo_cobro"))
+                    if p.get("tipo_cobro") in ["Pendiente", "Cobrado", "Cuenta corriente"] else 0,
+                    key=f"pedido_cobro_edit_{p['id']}",
+                )
+
+                obs_edit = st.text_area(
+                    "Observaciones",
+                    value=p.get("observaciones") or "",
+                    key=f"pedido_obs_edit_{p['id']}",
+                )
+
+                if st.button("Guardar cambios del pedido", key=f"guardar_pedido_edit_{p['id']}"):
+                    _actualizar_pedido_admin(
+                        db,
+                        p["id"],
+                        cliente_id_edit,
+                        cliente_nombre_edit.strip(),
+                        tipo_edit,
+                        nuevo_estado,
+                        forma_pago_edit,
+                        tipo_cobro_edit,
+                        obs_edit,
+                    )
+                    st.success("Pedido actualizado.")
+                    st.rerun()
 
             items_pedido = (
                 db.table(table("pedido_detalles"))
-                .select("tipo,producto_nombre,cantidad,precio_unitario,subtotal,promo_id")
+                .select("producto_nombre,cantidad,precio_unitario,subtotal,promo_flexible_nombre,promo_combinada_nombre")
                 .eq("pedido_id", p["id"])
                 .execute()
                 .data
@@ -705,6 +1217,36 @@ def render():
 
             if items_pedido:
                 st.dataframe(pd.DataFrame(items_pedido), use_container_width=True, hide_index=True)
+
+            # Ver detalle elegido dentro de promos flexibles/combinadas si existe
+            try:
+                flex_det = (
+                    db.table("namnam_pedido_promo_flexible_items")
+                    .select("producto_nombre,cantidad")
+                    .eq("pedido_id", p["id"])
+                    .execute()
+                    .data
+                    or []
+                )
+                combo_det = (
+                    db.table("namnam_pedido_promo_combinada_items")
+                    .select("familia,producto_nombre,cantidad")
+                    .eq("pedido_id", p["id"])
+                    .execute()
+                    .data
+                    or []
+                )
+
+                if flex_det or combo_det:
+                    with st.expander("Ver composición de promos"):
+                        if flex_det:
+                            st.markdown("**Promos flexibles**")
+                            st.dataframe(pd.DataFrame(flex_det), use_container_width=True, hide_index=True)
+                        if combo_det:
+                            st.markdown("**Promos combinadas**")
+                            st.dataframe(pd.DataFrame(combo_det), use_container_width=True, hide_index=True)
+            except Exception:
+                pass
 
             if p.get("observaciones"):
                 st.caption(p["observaciones"])
