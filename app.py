@@ -15,6 +15,7 @@ from modulos.pedidos import render as render_pedidos
 from modulos.produccion import render as render_produccion
 from modulos.promociones import render as render_promociones
 from modulos.promos_flexibles import render as render_promos_flexibles
+from modulos.promos_combinadas import render as render_promos_combinadas
 from modulos.stock import render as render_stock
 from modulos.caja import render as render_caja
 from modulos.colaboradores import render as render_colaboradores
@@ -202,6 +203,7 @@ MENU = {
     "📝 Pedidos": "Pedidos",
     "🏷️ Promociones": "Promociones",
     "🧺 Promos flexibles": "Promos flexibles",
+    "🧩 Promos combinadas": "Promos combinadas",
     "👨‍🍳 Producción": "Producción",
     "📊 Stock": "Stock",
     "💰 Caja": "Caja",
@@ -241,6 +243,9 @@ elif seccion == "Promociones":
 
 elif seccion == "Promos flexibles":
     render_promos_flexibles()
+
+elif seccion == "Promos combinadas":
+    render_promos_combinadas()
 
 elif seccion == "Producción":
     render_produccion()
