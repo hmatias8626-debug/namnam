@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from services.auth import current_user
 from services.db import require_db, fetch_table, money, table
 from services.ui import header
 
@@ -624,10 +625,102 @@ def _actualizar_pedido_admin(db, pedido_id, cliente_id, cliente_nombre, tipo_cli
         db.table(table("pedidos")).update(update_data).eq("id", pedido_id).execute()
 
 
+def _buscar_producto_para_detalle(db, det):
+    producto_id = det.get("producto_id")
+
+    if producto_id:
+        data = (
+            db.table(table("productos"))
+            .select("*")
+            .eq("id", producto_id)
+            .execute()
+            .data
+            or []
+        )
+        if data:
+            return data[0]
+
+    nombre = str(det.get("producto_nombre") or "").strip()
+    if not nombre:
+        return None
+
+    data = (
+        db.table(table("productos"))
+        .select("*")
+        .ilike("nombre", nombre)
+        .execute()
+        .data
+        or []
+    )
+
+    if data:
+        return data[0]
+
+    data = (
+        db.table(table("productos"))
+        .select("*")
+        .ilike("nombre", f"%{nombre}%")
+        .execute()
+        .data
+        or []
+    )
+
+    return data[0] if data else None
+
+
+def _registrar_auditoria_pedido(db, pedido_id, accion, antes, despues):
+    user = current_user() or {}
+    usuario = user.get("usuario") or user.get("nombre") or user.get("email") or "admin"
+
+    try:
+        db.table("namnam_pedidos_auditoria").insert({
+            "pedido_id": pedido_id,
+            "usuario": usuario,
+            "accion": accion,
+            "antes": antes,
+            "despues": despues,
+        }).execute()
+    except Exception:
+        # Si todavía no está la tabla, no rompemos el pedido.
+        pass
+
+
+def _actualizar_caja_por_pedido(db, pedido_id, nuevo_total):
+    try:
+        movimientos = (
+            db.table(table("caja"))
+            .select("*")
+            .eq("pedido_id", pedido_id)
+            .execute()
+            .data
+            or []
+        )
+
+        for mov in movimientos:
+            db.table(table("caja")).update({
+                "importe": nuevo_total,
+                "observaciones": f"{mov.get('observaciones') or ''} | Importe actualizado por modificación del pedido #{pedido_id}",
+            }).eq("id", mov["id"]).execute()
+    except Exception:
+        pass
+
+
 def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
-    """Recalcula los precios de productos normales según minorista/mayorista.
-    Las promos fijas/flexibles/combinadas mantienen su precio de promo.
+    """Recalcula precios de productos normales en un pedido ya guardado.
+    Busca el producto por producto_id y, si no está, por nombre.
+    Actualiza detalle, total del pedido, caja vinculada y auditoría.
+    Las promos mantienen precio de promo.
     """
+    pedido_antes = (
+        db.table(table("pedidos"))
+        .select("*")
+        .eq("id", pedido_id)
+        .execute()
+        .data
+        or []
+    )
+    pedido_antes = pedido_antes[0] if pedido_antes else {}
+
     detalles = (
         db.table(table("pedido_detalles"))
         .select("*")
@@ -637,14 +730,14 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
         or []
     )
 
-    total = 0.0
-    productos_cache = {}
+    total_anterior = _float(pedido_antes.get("total"))
+    total_nuevo = 0.0
+    cambios = []
 
     for det in detalles:
         cantidad = _float(det.get("cantidad"))
-        precio_unitario = _float(det.get("precio_unitario"))
+        precio_anterior = _float(det.get("precio_unitario"))
 
-        # Si es promo, no se recalcula contra producto porque tiene precio propio.
         es_promo = bool(
             det.get("promo_id")
             or det.get("promo_flexible_id")
@@ -653,43 +746,62 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
             or det.get("promo_combinada_nombre")
         )
 
-        producto_id = det.get("producto_id")
+        precio_nuevo = precio_anterior
 
-        if producto_id and not es_promo:
-            if producto_id not in productos_cache:
-                prod_data = (
-                    db.table(table("productos"))
-                    .select("*")
-                    .eq("id", producto_id)
-                    .execute()
-                    .data
-                    or []
-                )
-                productos_cache[producto_id] = prod_data[0] if prod_data else None
-
-            producto = productos_cache.get(producto_id)
-
+        if not es_promo:
+            producto = _buscar_producto_para_detalle(db, det)
             if producto:
-                precio_unitario = _precio_para_tipo(producto, tipo_venta)
+                precio_nuevo = _precio_para_tipo(producto, tipo_venta)
 
-        subtotal = cantidad * precio_unitario
-        total += subtotal
+        subtotal_nuevo = cantidad * precio_nuevo
+        total_nuevo += subtotal_nuevo
+
+        if precio_nuevo != precio_anterior or _float(det.get("subtotal")) != subtotal_nuevo:
+            cambios.append({
+                "detalle_id": det.get("id"),
+                "producto": det.get("producto_nombre"),
+                "cantidad": cantidad,
+                "precio_anterior": precio_anterior,
+                "precio_nuevo": precio_nuevo,
+                "subtotal_anterior": _float(det.get("subtotal")),
+                "subtotal_nuevo": subtotal_nuevo,
+            })
 
         db.table(table("pedido_detalles")).update({
-            "precio_unitario": precio_unitario,
-            "subtotal": subtotal,
+            "precio_unitario": precio_nuevo,
+            "subtotal": subtotal_nuevo,
         }).eq("id", det["id"]).execute()
 
     db.table(table("pedidos")).update({
-        "total": total,
+        "total": total_nuevo,
+        "tipo_cliente": tipo_venta,
     }).eq("id", pedido_id).execute()
 
-    return total
+    _actualizar_caja_por_pedido(db, pedido_id, total_nuevo)
+
+    _registrar_auditoria_pedido(
+        db,
+        pedido_id,
+        "Recalcular precios por cambio de tipo de cliente",
+        {
+            "tipo_cliente_anterior": pedido_antes.get("tipo_cliente"),
+            "total_anterior": total_anterior,
+        },
+        {
+            "tipo_cliente_nuevo": tipo_venta,
+            "total_nuevo": total_nuevo,
+            "cambios": cambios,
+        },
+    )
+
+    return total_nuevo, cambios
 
 
 def render():
     header("📝 Pedidos", "Crear pedido por familias, promos y precios minorista/mayorista")
     db = require_db()
+    user = current_user() or {}
+    es_admin = user.get("rol") == "admin"
     _init_pedido_cantidades()
 
     productos = [p for p in fetch_table("productos") if p.get("activo")]
@@ -1263,6 +1375,23 @@ def render():
                 )
 
                 if st.button("Guardar cambios del pedido", key=f"guardar_pedido_edit_{p['id']}"):
+                    cambia_precio_o_tipo = recalcular_precios or tipo_edit != (p.get("tipo_cliente") or "Minorista")
+
+                    if cambia_precio_o_tipo and not es_admin:
+                        st.error("Esta modificación necesita autorización de un administrador.")
+                        return
+
+                    antes_admin = {
+                        "cliente_id": p.get("cliente_id"),
+                        "cliente_nombre": p.get("cliente_nombre"),
+                        "tipo_cliente": p.get("tipo_cliente"),
+                        "estado": p.get("estado"),
+                        "forma_pago": p.get("forma_pago"),
+                        "tipo_cobro": p.get("tipo_cobro"),
+                        "observaciones": p.get("observaciones"),
+                        "total": p.get("total"),
+                    }
+
                     _actualizar_pedido_admin(
                         db,
                         p["id"],
@@ -1276,7 +1405,28 @@ def render():
                     )
 
                     if recalcular_precios:
-                        _recalcular_precios_pedido(db, p["id"], tipo_edit)
+                        total_nuevo, cambios = _recalcular_precios_pedido(db, p["id"], tipo_edit)
+                    else:
+                        total_nuevo, cambios = _float(p.get("total")), []
+
+                    _registrar_auditoria_pedido(
+                        db,
+                        p["id"],
+                        "Editar datos del pedido",
+                        antes_admin,
+                        {
+                            "cliente_id": cliente_id_edit,
+                            "cliente_nombre": cliente_nombre_edit.strip(),
+                            "tipo_cliente": tipo_edit,
+                            "estado": nuevo_estado,
+                            "forma_pago": forma_pago_edit,
+                            "tipo_cobro": tipo_cobro_edit,
+                            "observaciones": obs_edit,
+                            "total": total_nuevo,
+                            "recalculo_precios": recalcular_precios,
+                            "cambios_precios": cambios,
+                        },
+                    )
 
                     st.success("Pedido actualizado.")
                     st.rerun()
@@ -1319,6 +1469,23 @@ def render():
                         if combo_det:
                             st.markdown("**Promos combinadas**")
                             st.dataframe(pd.DataFrame(combo_det), use_container_width=True, hide_index=True)
+            except Exception:
+                pass
+
+            try:
+                auditoria = (
+                    db.table("namnam_pedidos_auditoria")
+                    .select("fecha,usuario,accion")
+                    .eq("pedido_id", p["id"])
+                    .order("fecha")
+                    .execute()
+                    .data
+                    or []
+                )
+
+                if auditoria:
+                    with st.expander("🕵️ Historial de modificaciones"):
+                        st.dataframe(pd.DataFrame(auditoria), use_container_width=True, hide_index=True)
             except Exception:
                 pass
 
