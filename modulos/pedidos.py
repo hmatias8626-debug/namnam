@@ -1,3 +1,5 @@
+import unicodedata
+
 import pandas as pd
 import streamlit as st
 
@@ -57,14 +59,61 @@ def _emoji_familia(familia):
     return "📦"
 
 
+def _precio_producto(producto, tipo_venta):
+    if not producto:
+        return 0.0
+
+    mayorista_cols = [
+        "precio_mayorista",
+        "precio_mayor",
+        "precio_mayorista_venta",
+        "precio_venta_mayorista",
+        "precio_wholesale",
+        "mayorista",
+    ]
+
+    minorista_cols = [
+        "precio_venta",
+        "precio_minorista",
+        "precio",
+        "precio_publico",
+        "venta",
+    ]
+
+    cols = mayorista_cols if tipo_venta == "Mayorista" else minorista_cols
+
+    for col in cols:
+        if col in producto and producto.get(col) not in (None, ""):
+            val = _float(producto.get(col))
+            if val > 0:
+                return val
+
+    # Fallback: si no hay mayorista cargado, usa minorista.
+    for col in minorista_cols:
+        if col in producto and producto.get(col) not in (None, ""):
+            val = _float(producto.get(col))
+            if val > 0:
+                return val
+
+    return 0.0
+
+
 def _precio_para_tipo(producto, tipo_venta):
-    if tipo_venta == "Mayorista":
-        return _float(producto.get("precio_mayorista") or producto.get("precio_venta"))
-    return _float(producto.get("precio_venta"))
+    return _precio_producto(producto, tipo_venta)
 
 
 def _precio_mayorista(producto):
-    return _float(producto.get("precio_mayorista") or producto.get("precio_venta"))
+    return _precio_producto(producto, "Mayorista")
+
+
+def _normalizar_nombre_producto(texto):
+    texto = str(texto or "").strip().lower()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    texto = " ".join(texto.split())
+    return texto
+
+
 
 
 def _registrar_caja(db, pedido, forma_pago):
@@ -625,52 +674,74 @@ def _actualizar_pedido_admin(db, pedido_id, cliente_id, cliente_nombre, tipo_cli
         db.table(table("pedidos")).update(update_data).eq("id", pedido_id).execute()
 
 
-def _buscar_producto_para_detalle(db, det):
+def _leer_productos_cache(db):
+    try:
+        productos = db.table(table("productos")).select("*").execute().data or []
+    except Exception:
+        productos = []
+
+    por_id = {}
+    por_nombre = {}
+
+    for p in productos:
+        if p.get("id") is not None:
+            por_id[str(p.get("id"))] = p
+
+        nombres_posibles = [
+            p.get("nombre"),
+            p.get("producto_nombre"),
+            p.get("descripcion"),
+            p.get("detalle"),
+        ]
+
+        for nom in nombres_posibles:
+            n = _normalizar_nombre_producto(nom)
+            if n:
+                por_nombre[n] = p
+
+    return productos, por_id, por_nombre
+
+
+def _buscar_producto_para_detalle(det, por_id, por_nombre, productos):
     producto_id = det.get("producto_id")
 
-    if producto_id:
-        data = (
-            db.table(table("productos"))
-            .select("*")
-            .eq("id", producto_id)
-            .execute()
-            .data
-            or []
-        )
-        if data:
-            return data[0]
+    if producto_id is not None and str(producto_id) in por_id:
+        return por_id[str(producto_id)]
 
-    nombre = str(det.get("producto_nombre") or "").strip()
-    if not nombre:
-        return None
+    nombre_det = _normalizar_nombre_producto(det.get("producto_nombre"))
 
-    data = (
-        db.table(table("productos"))
-        .select("*")
-        .ilike("nombre", nombre)
-        .execute()
-        .data
-        or []
-    )
+    if nombre_det in por_nombre:
+        return por_nombre[nombre_det]
 
-    if data:
-        return data[0]
+    # Búsqueda flexible: si el nombre del detalle contiene al producto o al revés.
+    for p in productos:
+        nombres_posibles = [
+            p.get("nombre"),
+            p.get("producto_nombre"),
+            p.get("descripcion"),
+            p.get("detalle"),
+        ]
 
-    data = (
-        db.table(table("productos"))
-        .select("*")
-        .ilike("nombre", f"%{nombre}%")
-        .execute()
-        .data
-        or []
-    )
+        for nom in nombres_posibles:
+            nom_norm = _normalizar_nombre_producto(nom)
+            if not nom_norm:
+                continue
 
-    return data[0] if data else None
+            if nombre_det == nom_norm or nombre_det in nom_norm or nom_norm in nombre_det:
+                return p
+
+    return None
 
 
 def _registrar_auditoria_pedido(db, pedido_id, accion, antes, despues):
     user = current_user() or {}
-    usuario = user.get("usuario") or user.get("nombre") or user.get("email") or "admin"
+    usuario = (
+        user.get("usuario")
+        or user.get("nombre")
+        or user.get("email")
+        or user.get("rol")
+        or "admin"
+    )
 
     try:
         db.table("namnam_pedidos_auditoria").insert({
@@ -681,11 +752,12 @@ def _registrar_auditoria_pedido(db, pedido_id, accion, antes, despues):
             "despues": despues,
         }).execute()
     except Exception:
-        # Si todavía no está la tabla, no rompemos el pedido.
         pass
 
 
 def _actualizar_caja_por_pedido(db, pedido_id, nuevo_total):
+    actualizados = 0
+
     try:
         movimientos = (
             db.table(table("caja"))
@@ -701,17 +773,20 @@ def _actualizar_caja_por_pedido(db, pedido_id, nuevo_total):
                 "importe": nuevo_total,
                 "observaciones": f"{mov.get('observaciones') or ''} | Importe actualizado por modificación del pedido #{pedido_id}",
             }).eq("id", mov["id"]).execute()
+            actualizados += 1
     except Exception:
         pass
+
+    return actualizados
 
 
 def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
     """Recalcula precios de productos normales en un pedido ya guardado.
-    Busca el producto por producto_id y, si no está, por nombre.
+    Busca productos por id, nombre exacto y nombre normalizado.
     Actualiza detalle, total del pedido, caja vinculada y auditoría.
     Las promos mantienen precio de promo.
     """
-    pedido_antes = (
+    pedido_antes_data = (
         db.table(table("pedidos"))
         .select("*")
         .eq("id", pedido_id)
@@ -719,7 +794,7 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
         .data
         or []
     )
-    pedido_antes = pedido_antes[0] if pedido_antes else {}
+    pedido_antes = pedido_antes_data[0] if pedido_antes_data else {}
 
     detalles = (
         db.table(table("pedido_detalles"))
@@ -730,9 +805,12 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
         or []
     )
 
+    productos, por_id, por_nombre, = _leer_productos_cache(db)
+
     total_anterior = _float(pedido_antes.get("total"))
     total_nuevo = 0.0
     cambios = []
+    sin_producto = []
 
     for det in detalles:
         cantidad = _float(det.get("cantidad"))
@@ -747,25 +825,35 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
         )
 
         precio_nuevo = precio_anterior
+        producto_encontrado = None
 
         if not es_promo:
-            producto = _buscar_producto_para_detalle(db, det)
-            if producto:
-                precio_nuevo = _precio_para_tipo(producto, tipo_venta)
+            producto_encontrado = _buscar_producto_para_detalle(det, por_id, por_nombre, productos)
+
+            if producto_encontrado:
+                precio_detectado = _precio_para_tipo(producto_encontrado, tipo_venta)
+                if precio_detectado > 0:
+                    precio_nuevo = precio_detectado
+            else:
+                sin_producto.append(det.get("producto_nombre"))
 
         subtotal_nuevo = cantidad * precio_nuevo
         total_nuevo += subtotal_nuevo
 
+        cambio = {
+            "detalle_id": det.get("id"),
+            "producto": det.get("producto_nombre"),
+            "cantidad": cantidad,
+            "precio_anterior": precio_anterior,
+            "precio_nuevo": precio_nuevo,
+            "subtotal_anterior": _float(det.get("subtotal")),
+            "subtotal_nuevo": subtotal_nuevo,
+            "producto_encontrado": bool(producto_encontrado),
+            "es_promo": es_promo,
+        }
+
         if precio_nuevo != precio_anterior or _float(det.get("subtotal")) != subtotal_nuevo:
-            cambios.append({
-                "detalle_id": det.get("id"),
-                "producto": det.get("producto_nombre"),
-                "cantidad": cantidad,
-                "precio_anterior": precio_anterior,
-                "precio_nuevo": precio_nuevo,
-                "subtotal_anterior": _float(det.get("subtotal")),
-                "subtotal_nuevo": subtotal_nuevo,
-            })
+            cambios.append(cambio)
 
         db.table(table("pedido_detalles")).update({
             "precio_unitario": precio_nuevo,
@@ -777,7 +865,7 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
         "tipo_cliente": tipo_venta,
     }).eq("id", pedido_id).execute()
 
-    _actualizar_caja_por_pedido(db, pedido_id, total_nuevo)
+    cajas_actualizadas = _actualizar_caja_por_pedido(db, pedido_id, total_nuevo)
 
     _registrar_auditoria_pedido(
         db,
@@ -791,10 +879,12 @@ def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
             "tipo_cliente_nuevo": tipo_venta,
             "total_nuevo": total_nuevo,
             "cambios": cambios,
+            "sin_producto": sin_producto,
+            "cajas_actualizadas": cajas_actualizadas,
         },
     )
 
-    return total_nuevo, cambios
+    return total_nuevo, cambios, sin_producto, cajas_actualizadas
 
 
 def render():
@@ -1297,6 +1387,10 @@ def render():
             else:
                 c4.info("Pendiente")
 
+            msg_recalculo = st.session_state.get(f"recalculo_msg_{p['id']}")
+            if msg_recalculo:
+                st.success(msg_recalculo)
+
             if st.button("Actualizar estado", key=f"up{p['id']}"):
                 db.table(table("pedidos")).update({
                     "estado": nuevo_estado
@@ -1405,9 +1499,16 @@ def render():
                     )
 
                     if recalcular_precios:
-                        total_nuevo, cambios = _recalcular_precios_pedido(db, p["id"], tipo_edit)
+                        total_nuevo, cambios, sin_producto, cajas_actualizadas = _recalcular_precios_pedido(db, p["id"], tipo_edit)
+                        st.session_state[f"recalculo_msg_{p['id']}"] = (
+                            f"Recalculado: {len(cambios)} ítems modificados. "
+                            f"Cajas actualizadas: {cajas_actualizadas}. "
+                            f"Sin producto encontrado: {len(sin_producto)}."
+                        )
                     else:
                         total_nuevo, cambios = _float(p.get("total")), []
+                        sin_producto = []
+                        cajas_actualizadas = 0
 
                     _registrar_auditoria_pedido(
                         db,
