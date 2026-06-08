@@ -624,6 +624,69 @@ def _actualizar_pedido_admin(db, pedido_id, cliente_id, cliente_nombre, tipo_cli
         db.table(table("pedidos")).update(update_data).eq("id", pedido_id).execute()
 
 
+def _recalcular_precios_pedido(db, pedido_id, tipo_venta):
+    """Recalcula los precios de productos normales según minorista/mayorista.
+    Las promos fijas/flexibles/combinadas mantienen su precio de promo.
+    """
+    detalles = (
+        db.table(table("pedido_detalles"))
+        .select("*")
+        .eq("pedido_id", pedido_id)
+        .execute()
+        .data
+        or []
+    )
+
+    total = 0.0
+    productos_cache = {}
+
+    for det in detalles:
+        cantidad = _float(det.get("cantidad"))
+        precio_unitario = _float(det.get("precio_unitario"))
+
+        # Si es promo, no se recalcula contra producto porque tiene precio propio.
+        es_promo = bool(
+            det.get("promo_id")
+            or det.get("promo_flexible_id")
+            or det.get("promo_combinada_id")
+            or det.get("promo_flexible_nombre")
+            or det.get("promo_combinada_nombre")
+        )
+
+        producto_id = det.get("producto_id")
+
+        if producto_id and not es_promo:
+            if producto_id not in productos_cache:
+                prod_data = (
+                    db.table(table("productos"))
+                    .select("*")
+                    .eq("id", producto_id)
+                    .execute()
+                    .data
+                    or []
+                )
+                productos_cache[producto_id] = prod_data[0] if prod_data else None
+
+            producto = productos_cache.get(producto_id)
+
+            if producto:
+                precio_unitario = _precio_para_tipo(producto, tipo_venta)
+
+        subtotal = cantidad * precio_unitario
+        total += subtotal
+
+        db.table(table("pedido_detalles")).update({
+            "precio_unitario": precio_unitario,
+            "subtotal": subtotal,
+        }).eq("id", det["id"]).execute()
+
+    db.table(table("pedidos")).update({
+        "total": total,
+    }).eq("id", pedido_id).execute()
+
+    return total
+
+
 def render():
     header("📝 Pedidos", "Crear pedido por familias, promos y precios minorista/mayorista")
     db = require_db()
@@ -1192,6 +1255,13 @@ def render():
                     key=f"pedido_obs_edit_{p['id']}",
                 )
 
+                recalcular_precios = st.checkbox(
+                    "Recalcular precios según tipo seleccionado",
+                    value=True,
+                    key=f"pedido_recalcular_precios_{p['id']}",
+                    help="Si cambiás de Minorista a Mayorista, actualiza los precios de los productos normales y el total. Las promos mantienen su precio de promo.",
+                )
+
                 if st.button("Guardar cambios del pedido", key=f"guardar_pedido_edit_{p['id']}"):
                     _actualizar_pedido_admin(
                         db,
@@ -1204,6 +1274,10 @@ def render():
                         tipo_cobro_edit,
                         obs_edit,
                     )
+
+                    if recalcular_precios:
+                        _recalcular_precios_pedido(db, p["id"], tipo_edit)
+
                     st.success("Pedido actualizado.")
                     st.rerun()
 
