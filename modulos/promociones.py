@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from services.auth import current_user
-from services.db import require_db, fetch_table, money
+from services.db import require_db, fetch_table, money, table
 from services.ui import header
 
 
@@ -13,272 +13,212 @@ def _float(v):
         return 0.0
 
 
-def _producto_label(p):
-    nombre = p.get("nombre") or f"Producto #{p.get('id')}"
-    familia = p.get("familia") or p.get("categoria") or p.get("rubro") or "Sin familia"
-    return f"{familia} · {nombre}"
+def _familia_producto(p):
+    return str(
+        p.get("familia")
+        or p.get("categoria")
+        or p.get("categoría")
+        or p.get("rubro")
+        or p.get("grupo")
+        or "Otros"
+    ).strip() or "Otros"
 
 
-def _init_promo_builder():
-    if "promo_builder_items" not in st.session_state:
-        st.session_state["promo_builder_items"] = []
-
-
-def _limpiar_promo_builder():
-    st.session_state["promo_builder_items"] = []
-    for k in list(st.session_state.keys()):
-        if str(k).startswith("promo_builder_"):
-            del st.session_state[k]
-
-
-def _agregar_item_builder(producto, cantidad):
-    _init_promo_builder()
-
-    cantidad = _float(cantidad)
-    if cantidad <= 0:
-        return
-
-    producto_id = producto["id"]
-
-    for item in st.session_state["promo_builder_items"]:
-        if item["producto_id"] == producto_id:
-            item["cantidad"] = _float(item["cantidad"]) + cantidad
-            return
-
-    st.session_state["promo_builder_items"].append({
-        "producto_id": producto_id,
-        "producto_nombre": producto.get("nombre"),
-        "producto_label": _producto_label(producto),
-        "cantidad": cantidad,
-    })
-
-
-def render():
-    user = current_user() or {}
-    rol = user.get("rol")
-
-    if rol not in ["admin"]:
-        st.error("Solo el administrador puede gestionar promociones.")
-        return
-
-    header("🏷️ Promociones", "Combos y promos con precio independiente")
-
-    db = require_db()
-    _init_promo_builder()
-
-    productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
-
+def _familias_productos():
     try:
-        promos = (
-            db.table("namnam_promos")
+        productos = [p for p in fetch_table("productos", "id") if p.get("activo")]
+    except Exception:
+        productos = []
+    familias = sorted({_familia_producto(p) for p in productos})
+    return familias or ["Sorrentinos", "Tartas", "Bombitas"]
+
+
+def _leer_promos_fijas(db):
+    try:
+        return db.table("namnam_promos").select("*").order("id").execute().data or []
+    except Exception:
+        return []
+
+
+def _leer_promos_familias(db):
+    try:
+        return db.table("namnam_promos_combinadas").select("*").order("id").execute().data or []
+    except Exception:
+        return []
+
+
+def _leer_grupos(db, promo_id):
+    try:
+        return (
+            db.table("namnam_promos_combinadas_grupos")
             .select("*")
-            .order("id")
+            .eq("promo_id", promo_id)
+            .order("orden")
             .execute()
             .data
             or []
         )
-    except Exception as e:
-        st.error("No pude leer la tabla de promociones.")
-        st.exception(e)
-        promos = []
+    except Exception:
+        return []
 
-    tab1, tab2 = st.tabs(["➕ Nueva promo", "🏷️ Promos cargadas"])
 
-    with tab1:
-        st.subheader("Crear promoción")
+def render():
+    user = current_user() or {}
+    if user.get("rol") != "admin":
+        st.error("Solo el administrador puede gestionar promociones.")
+        return
 
-        if not productos:
-            st.warning("Primero cargá productos.")
-        else:
-            nombre = st.text_input("Nombre de la promo", placeholder="Ej: Combo semanal")
-            descripcion = st.text_area("Descripción", placeholder="Ej: 2 docenas + 3 tartas + 12 bombas")
-            precio = st.number_input("Precio promo", min_value=0.0, step=500.0)
+    header("🏷️ Promociones", "Promos fijas y promos por familias")
+
+    db = require_db()
+    familias = _familias_productos()
+
+    tab_nueva, tab_lista, tab_fijas = st.tabs([
+        "➕ Nueva promo por familias",
+        "📋 Promos por familias",
+        "🏷️ Promos fijas anteriores",
+    ])
+
+    with tab_nueva:
+        st.subheader("Crear promo por familias")
+        st.caption("Ejemplo: Sorrentinos 2 + Tartas 3 + Bombitas 1 = precio único.")
+
+        with st.form("nueva_promo_familias"):
+            nombre = st.text_input("Nombre de promo", placeholder="Ej: PROMO COMBINADA ESPECIAL")
+            descripcion = st.text_area("Descripción", placeholder="Ej: 2 sorrentinos + 3 tartas + 1 bombita")
+            precio = st.number_input("Precio de la promo", min_value=0.0, step=500.0, value=0.0)
             activo = st.toggle("Activa", value=True)
 
-            st.markdown("### Productos incluidos")
+            cantidad_categorias = st.number_input("Elegir cantidad de categorías/familias", min_value=1, max_value=12, step=1, value=2)
 
-            producto_opciones = {_producto_label(p): p for p in productos}
+            grupos = []
+            for i in range(int(cantidad_categorias)):
+                with st.container(border=True):
+                    st.markdown(f"#### Categoría {i + 1}")
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    familia = c1.selectbox("Familia", familias, key=f"promo_new_fam_{i}")
+                    cantidad = c2.number_input("Cantidad", min_value=1.0, step=1.0, value=2.0, key=f"promo_new_cant_{i}")
+                    excluir = c3.text_input("Excluir texto", value="premium" if "tarta" in familia.lower() else "", key=f"promo_new_exc_{i}")
 
-            c1, c2, c3 = st.columns([4, 1, 1])
+                    grupos.append({
+                        "familia": familia,
+                        "cantidad_requerida": cantidad,
+                        "texto_excluir": excluir.strip().lower(),
+                        "orden": i + 1,
+                    })
 
-            producto_elegido_label = c1.selectbox(
-                "Producto",
-                list(producto_opciones.keys()),
-                key="promo_builder_producto"
-            )
-
-            cantidad = c2.number_input(
-                "Cantidad",
-                min_value=0.0,
-                step=1.0,
-                value=1.0,
-                key="promo_builder_cantidad"
-            )
-
-            c3.write("")
-            c3.write("")
-            agregar = c3.button("➕ Agregar")
-
-            if agregar:
-                producto = producto_opciones[producto_elegido_label]
-                _agregar_item_builder(producto, cantidad)
-                st.rerun()
-
-            items_builder = st.session_state["promo_builder_items"]
-
-            if items_builder:
-                st.markdown("### Detalle armado")
-
-                df_items = pd.DataFrame([
-                    {
-                        "Producto": item["producto_label"],
-                        "Cantidad": item["cantidad"],
-                    }
-                    for item in items_builder
-                ])
-
-                st.dataframe(df_items, use_container_width=True, hide_index=True)
-
-                st.markdown("#### Quitar productos")
-
-                for idx, item in enumerate(items_builder):
-                    c_item1, c_item2 = st.columns([5, 1])
-                    c_item1.write(f"**{item['producto_label']}** — Cantidad: {item['cantidad']:g}")
-                    if c_item2.button("Quitar", key=f"quitar_item_promo_{idx}"):
-                        st.session_state["promo_builder_items"].pop(idx)
-                        st.rerun()
-            else:
-                st.info("Todavía no agregaste productos a la promo.")
-
-            col_guardar, col_limpiar = st.columns([1, 1])
-
-            with col_guardar:
-                guardar = st.button("Guardar promo")
-
-            with col_limpiar:
-                limpiar = st.button("Limpiar detalle")
-
-            if limpiar:
-                _limpiar_promo_builder()
-                st.rerun()
+            guardar = st.form_submit_button("Guardar promo")
 
             if guardar:
                 if not nombre.strip():
                     st.warning("Falta el nombre de la promo.")
                 elif precio <= 0:
-                    st.warning("El precio debe ser mayor a 0.")
-                elif not st.session_state["promo_builder_items"]:
-                    st.warning("Agregá al menos un producto a la promo.")
+                    st.warning("Falta el precio de la promo.")
                 else:
-                    promo = db.table("namnam_promos").insert({
+                    promo = db.table("namnam_promos_combinadas").insert({
                         "nombre": nombre.strip(),
                         "descripcion": descripcion.strip(),
                         "precio": precio,
                         "activo": activo,
                     }).execute().data[0]
 
-                    detalles = []
+                    for g in grupos:
+                        g["promo_id"] = promo["id"]
 
-                    for item in st.session_state["promo_builder_items"]:
-                        detalles.append({
-                            "promo_id": promo["id"],
-                            "producto_id": item["producto_id"],
-                            "producto_nombre": item["producto_nombre"],
-                            "cantidad": _float(item["cantidad"]),
-                        })
-
-                    db.table("namnam_promos_detalle").insert(detalles).execute()
-
-                    _limpiar_promo_builder()
-                    st.success("Promo creada.")
+                    db.table("namnam_promos_combinadas_grupos").insert(grupos).execute()
+                    st.success("Promo guardada.")
                     st.rerun()
 
-    with tab2:
-        st.subheader("Promociones cargadas")
+    with tab_lista:
+        st.subheader("Promos por familias cargadas")
+        promos = _leer_promos_familias(db)
 
         if not promos:
-            st.info("Todavía no hay promociones cargadas.")
+            st.info("Todavía no hay promos por familias.")
             return
 
-        for promo in reversed(promos):
+        for promo in promos:
+            grupos = _leer_grupos(db, promo["id"])
             with st.container(border=True):
-                c1, c2, c3 = st.columns([3, 1, 1])
+                st.markdown(f"### {promo.get('nombre')}")
+                st.write(f"**Precio:** {money(promo.get('precio'))}")
+                if promo.get("descripcion"):
+                    st.caption(promo.get("descripcion"))
 
-                c1.markdown(f"### 🏷️ {promo.get('nombre')}")
-                c1.caption(promo.get("descripcion") or "")
+                st.markdown("**Familias:**")
+                for g in grupos:
+                    exc = f" — excluye: {g.get('texto_excluir')}" if g.get("texto_excluir") else ""
+                    st.write(f"- {g.get('familia')}: {g.get('cantidad_requerida'):g}{exc}")
 
-                c2.markdown("Precio")
-                c2.markdown(f"## {money(promo.get('precio'))}")
+                activo = st.toggle("Activa", value=bool(promo.get("activo", True)), key=f"promo_fam_act_{promo['id']}")
 
-                activo = c3.toggle(
-                    "Activa",
-                    value=bool(promo.get("activo", True)),
-                    key=f"promo_activa_{promo['id']}"
-                )
+                with st.expander("Editar"):
+                    nombre = st.text_input("Nombre", value=promo.get("nombre") or "", key=f"promo_fam_nom_{promo['id']}")
+                    descripcion = st.text_area("Descripción", value=promo.get("descripcion") or "", key=f"promo_fam_desc_{promo['id']}")
+                    precio = st.number_input("Precio", min_value=0.0, step=500.0, value=_float(promo.get("precio")), key=f"promo_fam_precio_{promo['id']}")
 
-                if activo != bool(promo.get("activo", True)):
-                    db.table("namnam_promos").update({"activo": activo}).eq("id", promo["id"]).execute()
-                    st.rerun()
-
-                detalles = (
-                    db.table("namnam_promos_detalle")
-                    .select("*")
-                    .eq("promo_id", promo["id"])
-                    .execute()
-                    .data
-                    or []
-                )
-
-                if detalles:
-                    st.markdown("**Incluye:**")
-                    st.dataframe(
-                        pd.DataFrame([
-                            {
-                                "Producto": d.get("producto_nombre"),
-                                "Cantidad": d.get("cantidad"),
-                            }
-                            for d in detalles
-                        ]),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                else:
-                    st.warning("Esta promo no tiene productos asociados.")
-
-                with st.expander("Editar datos principales"):
-                    nuevo_nombre = st.text_input(
-                        "Nombre",
-                        promo.get("nombre") or "",
-                        key=f"promo_nombre_{promo['id']}"
-                    )
-                    nueva_descripcion = st.text_area(
-                        "Descripción",
-                        promo.get("descripcion") or "",
-                        key=f"promo_desc_{promo['id']}"
-                    )
-                    nuevo_precio = st.number_input(
-                        "Precio",
-                        min_value=0.0,
-                        step=500.0,
-                        value=_float(promo.get("precio")),
-                        key=f"promo_precio_{promo['id']}"
-                    )
-
-                    col_g, col_b = st.columns([1, 1])
-
-                    if col_g.button("Guardar cambios", key=f"guardar_promo_{promo['id']}"):
-                        db.table("namnam_promos").update({
-                            "nombre": nuevo_nombre.strip(),
-                            "descripcion": nueva_descripcion.strip(),
-                            "precio": nuevo_precio,
+                    if st.button("Guardar datos generales", key=f"promo_fam_save_{promo['id']}"):
+                        db.table("namnam_promos_combinadas").update({
+                            "nombre": nombre.strip(),
+                            "descripcion": descripcion.strip(),
+                            "precio": precio,
                             "activo": activo,
                         }).eq("id", promo["id"]).execute()
-
                         st.success("Promo actualizada.")
                         st.rerun()
 
-                    if col_b.button("Eliminar promo", key=f"borrar_promo_{promo['id']}"):
-                        db.table("namnam_promos_detalle").delete().eq("promo_id", promo["id"]).execute()
-                        db.table("namnam_promos").delete().eq("id", promo["id"]).execute()
-                        st.success("Promo eliminada.")
+                    st.divider()
+                    st.markdown("#### Editar familias")
+                    for g in grupos:
+                        with st.container(border=True):
+                            familia_actual = g.get("familia") or familias[0]
+                            idx = familias.index(familia_actual) if familia_actual in familias else 0
+                            c1, c2, c3 = st.columns([2, 1, 1])
+                            familia = c1.selectbox("Familia", familias, index=idx, key=f"promo_g_fam_{g['id']}")
+                            cantidad = c2.number_input("Cantidad", min_value=1.0, step=1.0, value=_float(g.get("cantidad_requerida") or 1), key=f"promo_g_cant_{g['id']}")
+                            excluir = c3.text_input("Excluir", value=g.get("texto_excluir") or "", key=f"promo_g_exc_{g['id']}")
+
+                            c4, c5 = st.columns(2)
+                            if c4.button("Guardar familia", key=f"promo_g_save_{g['id']}"):
+                                db.table("namnam_promos_combinadas_grupos").update({
+                                    "familia": familia,
+                                    "cantidad_requerida": cantidad,
+                                    "texto_excluir": excluir.strip().lower(),
+                                }).eq("id", g["id"]).execute()
+                                st.rerun()
+
+                            if c5.button("Eliminar familia", key=f"promo_g_del_{g['id']}"):
+                                db.table("namnam_promos_combinadas_grupos").delete().eq("id", g["id"]).execute()
+                                st.rerun()
+
+                    st.divider()
+                    st.markdown("#### Agregar familia")
+                    c1, c2, c3 = st.columns([2, 1, 1])
+                    nueva_familia = c1.selectbox("Nueva familia", familias, key=f"promo_new_group_fam_{promo['id']}")
+                    nueva_cantidad = c2.number_input("Cantidad", min_value=1.0, step=1.0, value=1.0, key=f"promo_new_group_cant_{promo['id']}")
+                    nuevo_excluir = c3.text_input("Excluir", key=f"promo_new_group_exc_{promo['id']}")
+
+                    if st.button("Agregar familia", key=f"promo_add_group_{promo['id']}"):
+                        orden = max([int(g.get("orden") or 0) for g in grupos] or [0]) + 1
+                        db.table("namnam_promos_combinadas_grupos").insert({
+                            "promo_id": promo["id"],
+                            "familia": nueva_familia,
+                            "cantidad_requerida": nueva_cantidad,
+                            "texto_excluir": nuevo_excluir.strip().lower(),
+                            "orden": orden,
+                        }).execute()
                         st.rerun()
+
+                if st.button("Eliminar promo", key=f"promo_fam_delete_{promo['id']}"):
+                    db.table("namnam_promos_combinadas").delete().eq("id", promo["id"]).execute()
+                    st.success("Promo eliminada.")
+                    st.rerun()
+
+    with tab_fijas:
+        st.subheader("Promos fijas anteriores")
+        st.info("No se borran. Siguen disponibles para venta como promos fijas.")
+        promos = _leer_promos_fijas(db)
+        if promos:
+            st.dataframe(pd.DataFrame(promos), use_container_width=True, hide_index=True)
+        else:
+            st.caption("No hay promos fijas cargadas.")

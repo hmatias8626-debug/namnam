@@ -25,6 +25,56 @@ def _nombre_cliente(c):
     return f"{completo} - {tel}" if tel else (completo or f"Cliente #{c.get('id')}")
 
 
+def _cliente_es_mayorista(cliente):
+    if not cliente:
+        return False
+
+    valor = str(cliente.get("tipo_cliente") or "").strip().lower()
+    if valor == "mayorista":
+        return True
+
+    # Por si alguna vez quedó guardado como booleano/campo alternativo.
+    if cliente.get("mayorista") is True or cliente.get("es_mayorista") is True:
+        return True
+
+    return False
+
+
+def _usuario_actual_texto():
+    user = current_user() or {}
+    return (
+        user.get("usuario")
+        or user.get("nombre")
+        or user.get("email")
+        or user.get("rol")
+        or "admin"
+    )
+
+
+def _recalcular_pedido_sql(db, pedido_id, tipo_venta):
+    try:
+        res = db.rpc(
+            "namnam_recalcular_pedido_tipo",
+            {
+                "p_pedido_id": int(pedido_id),
+                "p_tipo": tipo_venta,
+                "p_usuario": _usuario_actual_texto(),
+            },
+        ).execute()
+
+        data = res.data
+        if isinstance(data, list) and data:
+            return data[0]
+        if isinstance(data, dict):
+            return data
+
+        return {"ok": True, "items_modificados": 0, "cajas_actualizadas": 0}
+    except Exception as e:
+        st.error("No pude recalcular con la función SQL. Ejecutá el SQL incluido y reiniciá la app.")
+        st.exception(e)
+        return None
+
+
 def _familia_producto(p):
     familia = (
         p.get("familia")
@@ -927,7 +977,8 @@ def render():
             cliente_id = cliente["id"]
             cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
 
-        tipo_default = (cliente or {}).get("tipo_cliente") or "Minorista"
+        cliente_mayorista = _cliente_es_mayorista(cliente)
+        tipo_default = "Mayorista" if cliente_mayorista else ((cliente or {}).get("tipo_cliente") or "Minorista")
         tipo_index = 1 if tipo_default == "Mayorista" else 0
 
         tipo_venta = c_tipo.radio(
@@ -935,8 +986,13 @@ def render():
             ["Minorista", "Mayorista"],
             index=tipo_index,
             horizontal=True,
-            help="Define qué precio se usa en este pedido.",
+            disabled=cliente_mayorista,
+            help="Si el cliente está cargado como Mayorista, se bloquea y usa precio mayorista.",
         )
+
+        if cliente_mayorista:
+            tipo_venta = "Mayorista"
+            c_tipo.success("Cliente mayorista: precio mayorista obligatorio.")
 
         cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
 
@@ -961,11 +1017,9 @@ def render():
         items = items_productos + items_promos_fijas + items_flexibles + items_combinados
         total = sum(i["subtotal"] for i in items)
 
-        tab_prod, tab_promos, tab_flex, tab_combo, tab_resumen = st.tabs([
+        tab_prod, tab_promos, tab_resumen = st.tabs([
             "📦 Productos",
-            "🏷️ Promos fijas",
-            "🧺 Flexibles",
-            "🧩 Combinadas",
+            "🏷️ Promociones",
             "🧾 Resumen",
         ])
 
@@ -1044,11 +1098,14 @@ def render():
                     c3.markdown(f"**{money(subtotal)}**")
 
         with tab_promos:
-            st.markdown("### 🏷️ Promos fijas")
+            st.markdown("### 🏷️ Promociones")
+            st.caption("Acá aparecen las promociones fijas y las promociones por familias/categorías.")
 
-            if not promos:
-                st.info("No hay promos fijas activas.")
-            else:
+            if not promos and not promos_combinadas:
+                st.info("No hay promociones activas.")
+
+            if promos:
+                st.markdown("#### Promos fijas")
                 for promo in promos:
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([4, 1, 1])
@@ -1077,79 +1134,15 @@ def render():
                         c3.write("Subtotal")
                         c3.markdown(f"**{money(_float(cant) * _float(promo.get('precio')))}**")
 
-        with tab_flex:
-            st.markdown("### 🧺 Promos flexibles")
+            if promos_combinadas:
+                st.markdown("#### Promos por familias")
 
-            if not promos_flexibles:
-                st.info("No hay promos flexibles activas.")
-            else:
-                for promo_flex in promos_flexibles:
-                    with st.container(border=True):
-                        promo_id = promo_flex["id"]
-                        requerido = _float(promo_flex.get("cantidad_requerida"))
-                        seleccionado = _flex_total_seleccionado(promo_id)
-                        faltan = max(0, requerido - seleccionado)
-
-                        st.markdown(f"### 🧺 {promo_flex.get('nombre')}")
-                        if promo_flex.get("descripcion"):
-                            st.caption(promo_flex.get("descripcion"))
-                        st.write(f"Elegidas: **{seleccionado:g} / {requerido:g}** · Precio: **{money(promo_flex.get('precio'))}**")
-
-                        if faltan > 0:
-                            st.warning(f"Faltan elegir {faltan:g}.")
-                        elif seleccionado > requerido:
-                            st.error(f"Te pasaste por {seleccionado - requerido:g}. Bajá cantidades.")
-                        else:
-                            st.success("Promo completa. Se suma al pedido.")
-
-                        productos_flex = _productos_para_promo_flexible(productos, promo_flex)
-
-                        if not productos_flex:
-                            st.info("No hay productos disponibles para esta promo.")
-                        else:
-                            for p in productos_flex:
-                                qty = int(_get_flex_qty(promo_id, p["id"]))
-                                total_actual = _flex_total_seleccionado(promo_id)
-                                max_manual = int(qty + max(0, requerido - total_actual))
-                                bloqueado = total_actual >= requerido and qty <= 0
-
-                                c1, c2, c3 = st.columns([4, 1, 1])
-                                c1.write(f"**{p.get('nombre')}**")
-                                c1.caption(f"{p.get('unidad') or 'unidad'} · incluido en promo")
-
-                                widget_key = f"flex_widget_{promo_id}_{p['id']}"
-                                if widget_key not in st.session_state:
-                                    st.session_state[widget_key] = qty
-
-                                c2.number_input(
-                                    "Cant.",
-                                    min_value=0,
-                                    max_value=max(0, max_manual),
-                                    step=1,
-                                    key=widget_key,
-                                    disabled=bloqueado,
-                                    on_change=_sync_flex_widget,
-                                    args=(promo_id, p["id"], widget_key),
-                                )
-
-                                if c3.button("🗑️", key=f"flex_del_{promo_id}_{p['id']}"):
-                                    _set_flex_qty(promo_id, p["id"], 0)
-                                    if widget_key in st.session_state:
-                                        st.session_state[widget_key] = 0
-                                    st.rerun()
-
-        with tab_combo:
-            st.markdown("### 🧩 Promos combinadas")
-
-            if not promos_combinadas:
-                st.info("No hay promos combinadas activas.")
-            else:
                 for promo_combo in promos_combinadas:
                     promo_id = promo_combo["id"]
                     grupos = grupos_combinadas.get(promo_id, [])
 
                     with st.container(border=True):
-                        st.markdown(f"### 🧩 {promo_combo.get('nombre')}")
+                        st.markdown(f"### 🏷️ {promo_combo.get('nombre')}")
                         if promo_combo.get("descripcion"):
                             st.caption(promo_combo.get("descripcion"))
                         st.write(f"Precio promo: **{money(promo_combo.get('precio'))}**")
@@ -1158,8 +1151,8 @@ def render():
 
                         for grupo in grupos:
                             grupo_id = grupo["id"]
-                            requerido = _float(grupo.get("cantidad_requerida"))
-                            seleccionado = _combo_total_grupo(promo_id, grupo_id)
+                            requerido = int(_float(grupo.get("cantidad_requerida")))
+                            seleccionado = int(_combo_total_grupo(promo_id, grupo_id))
 
                             if seleccionado != requerido:
                                 completa = False
@@ -1179,37 +1172,35 @@ def render():
                                 else:
                                     for p in productos_grupo:
                                         qty = int(_get_combo_qty(promo_id, grupo_id, p["id"]))
-                                        total_grupo = _combo_total_grupo(promo_id, grupo_id)
-                                        max_manual = int(qty + max(0, requerido - total_grupo))
-                                        bloqueado = total_grupo >= requerido and qty <= 0
+                                        total_grupo = int(_combo_total_grupo(promo_id, grupo_id))
+                                        restante = max(0, requerido - total_grupo)
 
-                                        c1, c2, c3 = st.columns([4, 1, 1])
-                                        c1.write(f"**{p.get('nombre')}**")
-                                        c1.caption(f"{p.get('unidad') or 'unidad'} · grupo {grupo.get('familia')}")
+                                        st.markdown(f"**{p.get('nombre')}**")
+                                        st.caption(f"{p.get('unidad') or 'unidad'} · grupo {grupo.get('familia')}")
 
-                                        widget_key = f"combo_widget_{promo_id}_{grupo_id}_{p['id']}"
-                                        if widget_key not in st.session_state:
-                                            st.session_state[widget_key] = qty
+                                        # Botones x1, x2, x3... según la cantidad pedida del grupo.
+                                        cols = st.columns(requerido + 1)
+                                        for n in range(1, requerido + 1):
+                                            # Si el producto ya tiene cantidad, permitimos cambiarla siempre que no se pase.
+                                            # Si está en cero, solo permite elegir hasta el restante.
+                                            permitido = (qty > 0 and (total_grupo - qty + n) <= requerido) or (qty == 0 and n <= restante)
+                                            activo = qty == n
+                                            label = f"✓ x{n}" if activo else f"x{n}"
 
-                                        c2.number_input(
-                                            "Cant.",
-                                            min_value=0,
-                                            max_value=max(0, max_manual),
-                                            step=1,
-                                            key=widget_key,
-                                            disabled=bloqueado,
-                                            on_change=_sync_combo_widget,
-                                            args=(promo_id, grupo_id, p["id"], widget_key),
-                                        )
+                                            if cols[n - 1].button(
+                                                label,
+                                                key=f"combo_x{n}_{promo_id}_{grupo_id}_{p['id']}",
+                                                disabled=not permitido,
+                                            ):
+                                                _set_combo_qty(promo_id, grupo_id, p["id"], n)
+                                                st.rerun()
 
-                                        if c3.button("🗑️", key=f"combo_del_{promo_id}_{grupo_id}_{p['id']}"):
+                                        if cols[-1].button("🗑️", key=f"combo_del_{promo_id}_{grupo_id}_{p['id']}"):
                                             _set_combo_qty(promo_id, grupo_id, p["id"], 0)
-                                            if widget_key in st.session_state:
-                                                st.session_state[widget_key] = 0
                                             st.rerun()
 
                         if completa and grupos:
-                            st.success("Promo combinada completa. Se suma al pedido.")
+                            st.success("Promo completa. Se suma al pedido.")
                         else:
                             st.info("Completá todos los grupos para sumar la promo.")
 
@@ -1414,13 +1405,27 @@ def render():
                     key=f"pedido_cliente_edit_{p['id']}",
                 )
 
+                cliente_edit_obj = None
+                cliente_edit_es_mayorista = False
+
+                if cliente_edit != "Sin cliente / Mostrador":
+                    cliente_edit_obj = cliente_por_label[cliente_edit]
+                    cliente_edit_es_mayorista = _cliente_es_mayorista(cliente_edit_obj)
+
+                tipo_edit_index = 1 if (cliente_edit_es_mayorista or p.get("tipo_cliente") == "Mayorista") else 0
+
                 tipo_edit = cedit2.radio(
                     "Tipo",
                     ["Minorista", "Mayorista"],
-                    index=1 if p.get("tipo_cliente") == "Mayorista" else 0,
+                    index=tipo_edit_index,
                     horizontal=True,
                     key=f"pedido_tipo_edit_{p['id']}",
+                    disabled=cliente_edit_es_mayorista,
                 )
+
+                if cliente_edit_es_mayorista:
+                    tipo_edit = "Mayorista"
+                    cedit2.success("Mayorista obligatorio.")
 
                 if cliente_edit == "Sin cliente / Mostrador":
                     cliente_id_edit = None
@@ -1430,7 +1435,7 @@ def render():
                         key=f"pedido_cliente_nombre_edit_{p['id']}",
                     )
                 else:
-                    cli = cliente_por_label[cliente_edit]
+                    cli = cliente_edit_obj
                     cliente_id_edit = cli.get("id")
                     cliente_nombre_edit = _nombre_cliente(cli).split(" - ")[0]
                     st.caption(f"Cliente seleccionado: {cliente_nombre_edit}")
@@ -1468,6 +1473,20 @@ def render():
                     help="Si cambiás de Minorista a Mayorista, actualiza los precios de los productos normales y el total. Las promos mantienen su precio de promo.",
                 )
 
+                if es_admin:
+                    if st.button("🔥 Aplicar precios del tipo seleccionado ahora", key=f"forzar_recalculo_sql_{p['id']}"):
+                        resultado_recalculo = _recalcular_pedido_sql(db, p["id"], tipo_edit)
+                        if resultado_recalculo:
+                            st.success(
+                                f"Listo. Ítems modificados: {resultado_recalculo.get('items_modificados')}. "
+                                f"Cajas actualizadas: {resultado_recalculo.get('cajas_actualizadas')}. "
+                                f"Total nuevo: {money(resultado_recalculo.get('total_nuevo'))}."
+                            )
+                            st.rerun()
+                else:
+                    st.warning("Solo un administrador puede recalcular precios de pedidos ya guardados.")
+
+
                 if st.button("Guardar cambios del pedido", key=f"guardar_pedido_edit_{p['id']}"):
                     cambia_precio_o_tipo = recalcular_precios or tipo_edit != (p.get("tipo_cliente") or "Minorista")
 
@@ -1499,11 +1518,21 @@ def render():
                     )
 
                     if recalcular_precios:
-                        total_nuevo, cambios, sin_producto, cajas_actualizadas = _recalcular_precios_pedido(db, p["id"], tipo_edit)
+                        resultado_recalculo = _recalcular_pedido_sql(db, p["id"], tipo_edit)
+
+                        if resultado_recalculo is None:
+                            return
+
+                        total_nuevo = _float(resultado_recalculo.get("total_nuevo"))
+                        cambios = []
+                        sin_producto = []
+                        cajas_actualizadas = int(resultado_recalculo.get("cajas_actualizadas") or 0)
+                        items_modificados = int(resultado_recalculo.get("items_modificados") or 0)
+
                         st.session_state[f"recalculo_msg_{p['id']}"] = (
-                            f"Recalculado: {len(cambios)} ítems modificados. "
+                            f"Recalculado por SQL: {items_modificados} ítems modificados. "
                             f"Cajas actualizadas: {cajas_actualizadas}. "
-                            f"Sin producto encontrado: {len(sin_producto)}."
+                            f"Total nuevo: {money(total_nuevo)}."
                         )
                     else:
                         total_nuevo, cambios = _float(p.get("total")), []
