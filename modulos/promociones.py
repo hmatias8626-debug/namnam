@@ -23,6 +23,9 @@ def _familia_producto(p):
         or "Otros"
     ).strip() or "Otros"
 
+def _familia_igual(familia_producto, familia_elegida):
+    return str(familia_producto or "").strip().lower() == str(familia_elegida or "").strip().lower()
+
 
 def _familias_productos():
     try:

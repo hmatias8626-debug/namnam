@@ -87,6 +87,9 @@ def _familia_producto(p):
     familia = str(familia).strip()
     return familia if familia else "Otros"
 
+def _familia_igual(familia_producto, familia_elegida):
+    return str(familia_producto or "").strip().lower() == str(familia_elegida or "").strip().lower()
+
 
 def _emoji_familia(familia):
     f = familia.lower()
@@ -327,7 +330,7 @@ def _productos_para_promo_flexible(productos, promo):
         fam = _familia_producto(p).lower()
         nombre = str(p.get("nombre") or "").lower()
 
-        if familia and fam != familia:
+        if familia and not _familia_igual(fam, familia):
             continue
 
         if excluir and (excluir in fam or excluir in nombre):
@@ -347,7 +350,7 @@ def _productos_para_grupo_combinado(productos, grupo):
         fam = _familia_producto(p).lower()
         nombre = str(p.get("nombre") or "").lower()
 
-        if familia and fam != familia:
+        if familia and not _familia_igual(fam, familia):
             continue
 
         if excluir and (excluir in fam or excluir in nombre):
