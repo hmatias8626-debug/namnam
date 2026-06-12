@@ -947,13 +947,6 @@ def render():
     es_admin = user.get("rol") == "admin"
     _init_pedido_cantidades()
 
-    # Limpieza de claves viejas que rompían en celular/cache
-    for old_key in list(st.session_state.keys()):
-                       if "pedido_tipo" in str(old_key):
-                           del st.session_state[old_key]
-
-    st.write("DEBUG SESSION:", list(st.session_state.keys()))
-
     productos = [p for p in fetch_table("productos") if p.get("activo")]
     clientes = [c for c in fetch_table("clientes") if c.get("activo")]
     promos = _leer_promos(db)
@@ -1266,7 +1259,7 @@ def render():
 
         with ctot2:
             if tipo_venta == "Mayorista":
-                forma_cobro = st.radio("Cobro", FORMAS_MAYORISTA, horizontal=False)
+                forma_cobro = st.selectbox("Cobro", FORMAS_MAYORISTA, key="forma_cobro_mayorista")
 
                 if forma_cobro == "Cobrar ahora":
                     forma_pago = st.selectbox("Forma de pago", ["Efectivo", "Transferencia", "Mercado Pago"])
