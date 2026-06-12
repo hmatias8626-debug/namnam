@@ -947,6 +947,13 @@ def render():
     es_admin = user.get("rol") == "admin"
     _init_pedido_cantidades()
 
+    # Limpieza de claves viejas que rompían en celular/cache
+    for old_key in list(st.session_state.keys()):
+    if "pedido_tipo" in str(old_key):
+        del st.session_state[old_key]
+
+    st.write("DEBUG SESSION:", list(st.session_state.keys()))
+
     productos = [p for p in fetch_table("productos") if p.get("activo")]
     clientes = [c for c in fetch_table("clientes") if c.get("activo")]
     promos = _leer_promos(db)
