@@ -949,8 +949,8 @@ def render():
 
     # Limpieza de claves viejas que rompían en celular/cache
     for old_key in list(st.session_state.keys()):
-    if "pedido_tipo" in str(old_key):
-        del st.session_state[old_key]
+                       if "pedido_tipo" in str(old_key):
+                           del st.session_state[old_key]
 
     st.write("DEBUG SESSION:", list(st.session_state.keys()))
 
