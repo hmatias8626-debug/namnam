@@ -981,21 +981,23 @@ def render():
             cliente_nombre = _nombre_cliente(cliente).split(" - ")[0]
 
         cliente_mayorista = _cliente_es_mayorista(cliente)
-        tipo_default = "Mayorista" if cliente_mayorista else ((cliente or {}).get("tipo_cliente") or "Minorista")
-        tipo_index = 1 if tipo_default == "Mayorista" else 0
-
-        tipo_venta = c_tipo.radio(
-            "Tipo de venta",
-            ["Minorista", "Mayorista"],
-            index=tipo_index,
-            horizontal=True,
-            disabled=cliente_mayorista,
-            help="Si el cliente está cargado como Mayorista, se bloquea y usa precio mayorista.",
-        )
 
         if cliente_mayorista:
             tipo_venta = "Mayorista"
-            c_tipo.success("Cliente mayorista: precio mayorista obligatorio.")
+            c_tipo.markdown("**Tipo de venta**")
+            c_tipo.success("Mayorista")
+            c_tipo.caption("Cliente mayorista: precio mayorista obligatorio.")
+        else:
+            tipo_default = (cliente or {}).get("tipo_cliente") or "Minorista"
+            tipo_index = 1 if tipo_default == "Mayorista" else 0
+
+            tipo_venta = c_tipo.radio(
+                "Tipo de venta",
+                ["Minorista", "Mayorista"],
+                index=tipo_index,
+                horizontal=True,
+                key="pedido_tipo_venta_radio",
+                help="Elegí si este pedido usa precio minorista o mayorista.",
 
         cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
 
