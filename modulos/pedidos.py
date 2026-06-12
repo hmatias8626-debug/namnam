@@ -997,10 +997,9 @@ def render():
         else:
             tipo_default = (cliente or {}).get("tipo_cliente") or "Minorista"
             tipo_index = 1 if tipo_default == "Mayorista" else 0
-
-            tipo_venta = c_tipo.radio(
-                            c_tipo.markdown("**Tipo de venta**")
-
+                
+            c_tipo.markdown("**Tipo de venta**")
+            
             col_min, col_may = c_tipo.columns(2)
 
             if "tipo_venta_manual" not in st.session_state:
@@ -1008,10 +1007,11 @@ def render():
 
             if col_min.button("Minorista", key="btn_tipo_minorista"):
                 st.session_state["tipo_venta_manual"] = "Minorista"
-
+                st.rerun()
+                
             if col_may.button("Mayorista", key="btn_tipo_mayorista"):
                 st.session_state["tipo_venta_manual"] = "Mayorista"
-
+                st.rerun()
             tipo_venta = st.session_state["tipo_venta_manual"]
 
             c_tipo.caption(f"Seleccionado: {tipo_venta}")
