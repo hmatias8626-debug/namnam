@@ -999,13 +999,22 @@ def render():
             tipo_index = 1 if tipo_default == "Mayorista" else 0
 
             tipo_venta = c_tipo.radio(
-                "Tipo de venta",
-                ["Minorista", "Mayorista"],
-                index=tipo_index,
-                horizontal=True,
-                key="pedido_tipo_venta_radio",
-                help="Elegí si este pedido usa precio minorista o mayorista.",
-            )
+                            c_tipo.markdown("**Tipo de venta**")
+
+            col_min, col_may = c_tipo.columns(2)
+
+            if "tipo_venta_manual" not in st.session_state:
+                st.session_state["tipo_venta_manual"] = "Mayorista" if tipo_index == 1 else "Minorista"
+
+            if col_min.button("Minorista", key="btn_tipo_minorista"):
+                st.session_state["tipo_venta_manual"] = "Minorista"
+
+            if col_may.button("Mayorista", key="btn_tipo_mayorista"):
+                st.session_state["tipo_venta_manual"] = "Mayorista"
+
+            tipo_venta = st.session_state["tipo_venta_manual"]
+
+            c_tipo.caption(f"Seleccionado: {tipo_venta}")
 
         cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
 
