@@ -1005,6 +1005,7 @@ def render():
                 horizontal=True,
                 key="pedido_tipo_venta_radio",
                 help="Elegí si este pedido usa precio minorista o mayorista.",
+            )
 
         cliente_manual = st.text_input("Nombre manual si no querés guardar cliente")
 
