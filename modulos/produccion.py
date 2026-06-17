@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from datetime import date, timedelta
 
 from services.auth import current_user
 from services.db import require_db, fetch_table, table
@@ -154,7 +155,21 @@ def render():
     db = require_db()
 
     try:
-        pedidos = fetch_table("pedidos", "fecha")
+        _todos = fetch_table("pedidos", "fecha")
+        _hoy = date.today()
+        _lunes = _hoy - timedelta(days=_hoy.weekday())
+        _domingo = _lunes + timedelta(days=6)
+        _estados_activos = {"Pendiente", "En preparación", "En Producción"}
+
+        def _fecha_efectiva_p(p):
+            fe = str(p.get("fecha_entrega") or "")[:10]
+            return fe if fe else str(p.get("fecha") or "")[:10]
+
+        pedidos = [
+            p for p in _todos
+            if _lunes.isoformat() <= _fecha_efectiva_p(p) <= _domingo.isoformat()
+            or (p.get("estado") or "Pendiente") in _estados_activos
+        ]
         productos = fetch_table("productos", "id")
         productos_por_id = {p.get("id"): p for p in productos}
     except Exception as e:

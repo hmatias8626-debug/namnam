@@ -1,4 +1,5 @@
 import unicodedata
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -17,6 +18,11 @@ def _float(v):
         return float(v or 0)
     except Exception:
         return 0.0
+
+
+def _fecha_efectiva(p):
+    fe = str(p.get("fecha_entrega") or "")[:10]
+    return fe if fe else str(p.get("fecha") or "")[:10]
 
 
 def _nombre_cliente(c):
@@ -1356,14 +1362,41 @@ def render():
 
     st.divider()
     st.subheader("Pedidos")
-    pedidos = fetch_table("pedidos", "fecha")
 
-    if not pedidos:
+    hoy = date.today()
+    lunes_actual = hoy - timedelta(days=hoy.weekday())
+
+    ver_historial = st.toggle("📅 Ver semanas anteriores", key="toggle_historial_pedidos")
+    if ver_historial:
+        semana_ref = st.date_input(
+            "Semana (cualquier día de la semana)",
+            value=lunes_actual - timedelta(weeks=1),
+            key="semana_historial_pedidos",
+        )
+        lunes = semana_ref - timedelta(days=semana_ref.weekday())
+    else:
+        lunes = lunes_actual
+
+    domingo = lunes + timedelta(days=6)
+    st.caption(f"Semana: {lunes.strftime('%d/%m/%Y')} — {domingo.strftime('%d/%m/%Y')}")
+
+    todos_los_pedidos = fetch_table("pedidos", "fecha")
+
+    if not todos_los_pedidos:
         st.info("Todavía no hay pedidos.")
         return
 
+    pedidos = [
+        p for p in todos_los_pedidos
+        if lunes.isoformat() <= _fecha_efectiva(p) <= domingo.isoformat()
+    ]
+
     cliente_opciones_lista = ["Sin cliente / Mostrador"] + [_nombre_cliente(c) for c in clientes]
     cliente_por_label = {_nombre_cliente(c): c for c in clientes}
+
+    if not pedidos:
+        st.info("No hay pedidos para esta semana.")
+        return
 
     for p in reversed(pedidos):
         with st.container(border=True):
