@@ -154,7 +154,6 @@ def _init_cart():
         st.session_state["cliente_promos"] = {}
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
-    st.session_state["cliente_promos_combo"] = {}
     if "cliente_promos_combo" not in st.session_state:
         st.session_state["cliente_promos_combo"] = {}
     if "pedido_online_confirmado" not in st.session_state:
@@ -280,7 +279,6 @@ def _flex_key(promo_id, producto_id):
 def _get_flex_qty(promo_id, producto_id):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
-    st.session_state["cliente_promos_combo"] = {}
     if "cliente_promos_combo" not in st.session_state:
         st.session_state["cliente_promos_combo"] = {}
     return _float(st.session_state["cliente_promos_flex"].get(_flex_key(promo_id, producto_id), 0))
@@ -289,7 +287,6 @@ def _get_flex_qty(promo_id, producto_id):
 def _set_flex_qty(promo_id, producto_id, value):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
-    st.session_state["cliente_promos_combo"] = {}
     if "cliente_promos_combo" not in st.session_state:
         st.session_state["cliente_promos_combo"] = {}
 
@@ -314,7 +311,6 @@ def _set_flex_qty_from_input(promo_id, producto_id, key):
 def _flex_total_seleccionado(promo_id):
     if "cliente_promos_flex" not in st.session_state:
         st.session_state["cliente_promos_flex"] = {}
-    st.session_state["cliente_promos_combo"] = {}
     if "cliente_promos_combo" not in st.session_state:
         st.session_state["cliente_promos_combo"] = {}
 
